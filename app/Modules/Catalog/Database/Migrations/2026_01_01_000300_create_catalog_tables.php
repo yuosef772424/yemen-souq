@@ -89,7 +89,7 @@ return new class extends Migration
             $table->index(['attribute_id', 'value_number']);
             $table->index(['attribute_id', 'option_id']);
         });
-
+        
         Schema::create('listing_price_history', function (Blueprint $table) {
             $table->id();
             $table->foreignId('listing_id')->constrained('listings')->cascadeOnDelete();
@@ -98,7 +98,7 @@ return new class extends Migration
             $table->decimal('new_amount', 15, 2)->nullable();
             $table->char('new_currency', 3)->nullable();
             $table->decimal('new_in_base', 18, 2)->nullable();
-            $table->timestamp('changed_at');
+            $table->dateTime('changed_at');
 
             $table->index(['listing_id', 'changed_at']);
         });
@@ -112,7 +112,7 @@ return new class extends Migration
 });
     }
 
-   public function down(): void
+    public function down(): void
 {
     Schema::dropIfExists('listing_price_history');
     Schema::dropIfExists('listing_multi_options');

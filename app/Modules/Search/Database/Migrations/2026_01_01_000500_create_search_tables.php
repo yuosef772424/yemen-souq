@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -36,8 +37,15 @@ return new class extends Migration
             $table->index(['location_path', 'published_at'], 'idx_si_location');
             $table->index('price_in_base', 'idx_si_price');
             $table->index(['is_featured', 'popularity_score', 'published_at'], 'idx_si_ranking');
-            $table->fullText('search_blob', 'ft_si_blob');
         });
+
+        // SQLite (المستخدم في الاختبارات) لا يدعم FULLTEXT.
+        // الفهرس يُنشأ في MySQL فقط، والبحث يتراجع إلى LIKE في غيره.
+        if (DB::getDriverName() === 'mysql') {
+            Schema::table('search_index', function (Blueprint $table) {
+                $table->fullText('search_blob', 'ft_si_blob');
+            });
+        }
 
         Schema::create('search_synonyms', function (Blueprint $table) {
             $table->id();

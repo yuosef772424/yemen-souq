@@ -6,7 +6,6 @@ use App\Modules\Catalog\Models\Listing;
 use App\Modules\Search\DTO\SearchCriteria;
 use App\Modules\Shared\Models\Category;
 use App\Modules\Shared\Models\Location;
-use App\Modules\Shared\Services\ArabicNormalizer;
 use App\Modules\Shared\Services\ExchangeRateService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,7 +23,7 @@ use Illuminate\Support\Facades\DB;
 final class SearchQueryBuilder
 {
     public function __construct(
-        private readonly ArabicNormalizer $normalizer,
+        private readonly SearchTokenizer $tokenizer,
         private readonly ExchangeRateService $rates,
     ) {
     }
@@ -57,27 +56,31 @@ final class SearchQueryBuilder
 
     // ---- النص ----
 
+    /**
+     * المطابقة تجري على search_blob وحده.
+     *
+     * كانت على title_normalized و description_normalized، فكان
+     * «شقة في حدة» يفشل لأن اسم المديرية مفتاح أجنبي لا نص.
+     * والعمود المجمّع يضم العنوان والوصف والتصنيف والموقع والمحافظة.
+     *
+     * نستخدم LIKE لا MATCH لأن محلل MySQL الافتراضي لا يفهم
+     * سوابق ولواحق العربية، فيفوّت "بالسيارة" عند البحث عن "سيارة".
+     */
     private function applyText(Builder $query, SearchCriteria $criteria): void
     {
         if (! $criteria->hasQuery()) {
             return;
         }
 
-        $tokens = $this->normalizer->tokenize($criteria->query);
+        $tokens = $this->tokenizer->tokens($criteria->query);
 
         if ($tokens === []) {
             return;
         }
 
-        // كل كلمة يجب أن تظهر في العنوان أو الوصف المطبّعين.
-        // نستخدم LIKE لا MATCH لأن محلل MySQL الافتراضي لا يفهم
-        // سوابق ولواحق العربية، فيفوّت "بالسيارة" عند البحث عن "سيارة".
         $query->where(function (Builder $outer) use ($tokens): void {
             foreach ($tokens as $token) {
-                $outer->where(function (Builder $inner) use ($token): void {
-                    $inner->where('title_normalized', 'like', "%{$token}%")
-                        ->orWhere('description_normalized', 'like', "%{$token}%");
-                });
+                $outer->where('search_blob', 'like', "%{$token}%");
             }
         });
     }
@@ -141,10 +144,14 @@ final class SearchQueryBuilder
         }
     }
 
+    // ---- الترتيب ----
+
     private function applySort(Builder $query, SearchCriteria $criteria): void
     {
         // المميّزة أولاً — والنطاق يتحقق من سريان الترقية لا من العلم وحده
         $query->featuredFirst();
+
+        $this->applyRelevance($query, $criteria);
 
         match ($criteria->sort) {
             // الترتيب بالسعر يجري على القيمة الموحّدة —
@@ -156,11 +163,68 @@ final class SearchQueryBuilder
         };
     }
 
+    /**
+     * إشارتا الصلة، بهذا الترتيب:
+     *
+     *   1. العبارة الكاملة كما كتبها المستخدم موجودة في العنوان
+     *   2. عدد كلمات الاستعلام الموجودة في العنوان
+     *
+     * ثم يكسر التعادل الترتيب المطلوب (الأحدث افتراضاً).
+     *
+     * لماذا عدّ لا اشتراط كل الكلمات: كان الشرط «كل الكلمات في العنوان»،
+     * واسم المدينة لا يكون في العنوان أبداً — هو في النص المجمّع. فأي
+     * استعلام من شكل «سلعة + مدينة»، وهو أشيع أشكال البحث في اليمن،
+     * كان يُسقط كل النتائج إلى مستوى واحد فيعود الترتيب إلى التاريخ وحده.
+     * الصلة تتعطّل صامتةً — وميزة تبدو عاملة وهي معطّلة أسوأ من غيابها.
+     *
+     * ولماذا يبقى هذا مقبولاً بعد رفض المجموع المرجّح (0.6×صلة + 0.4×رواج):
+     * العدّ ليس وزناً. «عنوانه طابق كلمتين من كلماتك وعنوانك واحدة» جملة
+     * يفهمها البائع؛ «درجته 0.73» ليست كذلك. الرفض كان للأوزان المخترعة
+     * التي لا تُضبط بلا حركة مرور، لا لكل حساب.
+     *
+     * ولماذا لا يُطبَّق عند ترتيب صريح بالسعر: من طلب «الأرخص أولاً»
+     * يريد عمود سعر مرتّباً. الاختيار الصريح يتقدّم على الصلة.
+     */
+    private function applyRelevance(Builder $query, SearchCriteria $criteria): void
+    {
+        if (! $criteria->hasQuery() || $criteria->sort !== 'newest') {
+            return;
+        }
+
+        $tokens = $this->tokenizer->tokens($criteria->query);
+
+        if ($tokens === []) {
+            return;
+        }
+
+        $phrase = $this->tokenizer->phrase($criteria->query);
+
+        if ($phrase !== '') {
+            $query->orderByRaw(
+                'case when title_normalized like ? then 1 else 0 end desc',
+                ['%' . $phrase . '%']
+            );
+        }
+
+        $hits = implode(
+            ' + ',
+            array_fill(0, count($tokens), 'case when title_normalized like ? then 1 else 0 end')
+        );
+
+        $query->orderByRaw(
+            "({$hits}) desc",
+            array_map(fn (string $token): string => '%' . $token . '%', $tokens)
+        );
+    }
+
     // ---- بيانات مساعدة للواجهة ----
 
     /**
      * توزيع النتائج على العملات — يُعرض بجانب فلتر العملة.
      * يُظهر للمستخدم أن النتائج فعلاً مختلطة العملات، بدل أن يفاجأ بذلك.
+     *
+     * reorder() ضرورية: تُزيل ترتيب الصلة وارتباطاته، وGROUP BY لا يقبل
+     * ترتيباً بتعبير على عمود غير مجمَّع.
      */
     public function currencyBreakdown(SearchCriteria $criteria): array
     {

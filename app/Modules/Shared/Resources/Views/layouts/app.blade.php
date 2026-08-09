@@ -15,13 +15,28 @@
 <body class="min-h-screen bg-canvas text-ink antialiased">
 
 <header class="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
-    <div class="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+    <div class="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
         <a href="{{ route('search') }}" class="flex items-center gap-2 shrink-0">
             <span class="grid size-9 place-items-center rounded-lg bg-ink text-sm font-bold text-white">سوق</span>
             <span class="hidden text-base font-semibold sm:block">سوق يمني</span>
         </a>
 
         <div class="flex-1"></div>
+
+        @auth
+            <span class="hidden text-sm text-muted sm:block">{{ auth()->user()->displayName() }}</span>
+
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-ink">
+                    خروج
+                </button>
+            </form>
+        @else
+            <a href="{{ route('login') }}" class="rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-ink">
+                دخول
+            </a>
+        @endauth
 
         <a href="{{ route('listing.create') }}" class="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
             أضف إعلانك
@@ -31,13 +46,14 @@
 
 <main class="mx-auto max-w-6xl px-4 py-6">
     @if (session('status'))
-    <div role="status" class="mb-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
-        <p class="font-medium">{{ session('status') }}</p>
-        @foreach (session('warnings', []) as $warning)
-            <p class="mt-1 text-xs text-green-800">{{ $warning }}</p>
-        @endforeach
-    </div>
-@endif
+        <div role="status" class="mb-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+            <p class="font-medium">{{ session('status') }}</p>
+            @foreach (session('warnings', []) as $warning)
+                <p class="mt-1 text-xs text-green-800">{{ $warning }}</p>
+            @endforeach
+        </div>
+    @endif
+
     @yield('content')
 </main>
 

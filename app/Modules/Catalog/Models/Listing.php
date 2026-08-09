@@ -2,11 +2,10 @@
 
 namespace App\Modules\Catalog\Models;
 
-use App\Models\User;
-use App\Modules\Catalog\Database\Factories\ListingFactory;
 use App\Modules\Shared\Models\Category;
 use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Models\Location;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,6 +19,13 @@ class Listing extends Model
 
     protected $table = 'listings';
 
+    /**
+     * الأعمدة المحسوبة (title_normalized, description_normalized,
+     * price_in_base, rate_used, rate_date) غائبة عن هذه القائمة بقصد —
+     * غيابها وحده يمنع تمريرها من طلب HTTP، لأن Eloquent يتجاهل $guarded
+     * كلياً متى كان $fillable غير فارغ. لا تُضِف $guarded هنا: يوهم بحماية
+     * ثانية غير موجودة.
+     */
     protected $fillable = [
         'user_id', 'category_id', 'location_id',
         'title', 'slug', 'description',
@@ -29,15 +35,6 @@ class Listing extends Model
         'is_featured', 'featured_until', 'published_at', 'expires_at',
     ];
 
-    /**
-     * الأعمدة المحسوبة — title_normalized و description_normalized
-     * و price_in_base و rate_used و rate_date — مستثناة من $fillable
-     * عن قصد. يملؤها ListingObserver وحده، فلا يستطيع طلب HTTP
-     * تمرير قيمة مزيّفة لها.
-     *
-     * لا نستخدم $guarded: لارافيل يتجاهله تماماً حين يكون $fillable
-     * غير فارغ، فوجوده معاً يوحي بحماية مزدوجة غير قائمة.
-     */
     protected function casts(): array
     {
         return [
@@ -93,9 +90,38 @@ class Listing extends Model
         return $query->where('status', 'active');
     }
 
+    /**
+     * الانتهاء زمني لا حالة.
+     *
+     * لماذا هنا وليس بمهمة مجدولة تُحوّل status إلى expired: المهمة قد تتأخر
+     * أو تتوقف، وحينها تظهر إعلانات منتهية في النتائج — والمستخدم يتصل برقم
+     * لإعلان لم يعد قائماً. الشرط الزمني صحيح دائماً بلا اعتماد على مجدول.
+     * المهمة المجدولة تبقى مفيدة للتنظيف، لا كخط الدفاع الأول.
+     */
+    public function scopeNotExpired(Builder $query): Builder
+    {
+        return $query->where(function (Builder $q): void {
+            $q->whereNull('expires_at')->orWhere('expires_at', '>=', now());
+        });
+    }
+
     public function scopePublished(Builder $query): Builder
     {
-        return $query->active()->whereNotNull('published_at');
+        return $query->active()->whereNotNull('published_at')->notExpired();
+    }
+
+    /**
+     * المميّزة أولاً — بشرط أن تكون ترقيتها سارية.
+     *
+     * is_featured وحده لا يكفي: featured_until موجود في الجدول ولم يكن
+     * يُفحص، فإعلان انتهت ترقيته يبقى مثبّتاً في أعلى النتائج إلى الأبد.
+     */
+    public function scopeFeaturedFirst(Builder $query): Builder
+    {
+        return $query->orderByRaw(
+            '(is_featured = 1 and (featured_until is null or featured_until >= ?)) desc',
+            [now()]
+        );
     }
 
     /** الفلترة بالسعر تجري دائماً على العمود الموحّد، لا على السعر الأصلي */
@@ -143,13 +169,19 @@ class Listing extends Model
         return $this->expires_at !== null && $this->expires_at->isPast();
     }
 
+    public function isFeaturedNow(): bool
+    {
+        return $this->is_featured
+            && ($this->featured_until === null || $this->featured_until->isFuture());
+    }
+
     public function getRouteKeyName(): string
     {
         return 'slug';
     }
 
-    protected static function newFactory(): ListingFactory
+    protected static function newFactory(): \App\Modules\Catalog\Database\Factories\ListingFactory
     {
-        return ListingFactory::new();
+        return \App\Modules\Catalog\Database\Factories\ListingFactory::new();
     }
 }

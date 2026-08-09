@@ -21,7 +21,8 @@ class ListingObserver
     public function __construct(
         private readonly ArabicNormalizer $normalizer,
         private readonly ExchangeRateService $rates,
-    ) {}
+    ) {
+    }
 
     public function saving(Listing $listing): void
     {
@@ -30,7 +31,15 @@ class ListingObserver
         $this->fillBasePrice($listing);
     }
 
-    public function updating(Listing $listing): void
+    /**
+     * سجل تغيّر السعر يُكتب بعد نجاح التحديث لا قبله.
+     *
+     * كان في updating، فلو فشل استعلام التحديث (قيد، انقطاع اتصال)
+     * يبقى صف في listing_price_history يشهد بتغيير لم يحدث.
+     * في updated الأصول ما زالت متاحة (syncOriginal يجري بعده)،
+     * فلا نفقد شيئاً مقابل هذه الضمانة.
+     */
+    public function updated(Listing $listing): void
     {
         $this->recordPriceChange($listing);
     }
@@ -54,10 +63,12 @@ class ListingObserver
             return;
         }
 
-        // العربية لا تنتج slug مفيداً، فنعتمد على معرّف عشوائي قصير
-        $base = Str::slug($listing->title) ?: 'listing';
+        // Str::slug($title) بلا معامل لغة يحذف كل المحارف العربية ويرجع '' —
+        // فتصبح كل الروابط listing-x8f3k2m1 ويُفقد أي أثر في محركات البحث.
+        // تمرير null كلغة يُبقي العربية كما هي.
+        $base = Str::slug($listing->title, '-', null) ?: 'listing';
 
-        $listing->slug = $base.'-'.Str::lower(Str::random(8));
+        $listing->slug = Str::limit($base, 120, '') . '-' . Str::lower(Str::random(6));
     }
 
     /**
@@ -66,10 +77,9 @@ class ListingObserver
      */
     private function fillBasePrice(Listing $listing): void
     {
-        $needsRecalculation = $listing->isDirty(['price_amount', 'currency_code'])
-            || $listing->price_in_base === null;
+        $priceChanged = $listing->isDirty(['price_amount', 'currency_code']);
 
-        if (! $needsRecalculation) {
+        if (! $priceChanged && $listing->price_in_base !== null) {
             return;
         }
 
@@ -84,7 +94,7 @@ class ListingObserver
         $converted = $this->rates->toBase(
             (float) $listing->price_amount,
             $listing->currency_code,
-            $listing->rate_date?->toDateString(),
+            $this->conversionDate($listing, $priceChanged),
         );
 
         $listing->price_in_base = $converted['amount'];
@@ -92,10 +102,38 @@ class ListingObserver
         $listing->rate_date = $converted['date'];
     }
 
+    /**
+     * أي تاريخ نُحوّل به؟ هذا كان العيب.
+     *
+     * الخطأ السابق: تمرير rate_date المحفوظ دائماً. وrate_date لا يُصفَّر،
+     * فمعلن نشر قبل ثلاثة أشهر وخفّض سعره اليوم كان سعره الجديد يُحوَّل
+     * بسعر صرف قبل ثلاثة أشهر. في سوق ريالُه متقلب هذا خطأ في جوهر المشروع.
+     *
+     * القاعدة: تغيّر السعر حدث جديد → سعر صرف يومه (null تعني اليوم).
+     * وإعادة الحساب لإعلان لم يتغيّر سعره (تعبئة رجعية لعمود فارغ)
+     * تحترم تاريخه الأصلي: rate_date إن وُجد، وإلا تاريخ النشر، وإلا الإنشاء.
+     *
+     * البديل المرفوض: استعمال اليوم دائماً. أبسط، لكنه يعيد تسعير كل
+     * الإعلانات القديمة بسعر اليوم عند أي تعبئة رجعية — ويهدم تاريخية الأسعار
+     * التي بُني عليها ExchangeRateService.
+     */
+    private function conversionDate(Listing $listing, bool $priceChanged): ?string
+    {
+        if ($priceChanged) {
+            return null;
+        }
+
+        if ($listing->rate_date !== null) {
+            return $listing->rate_date->toDateString();
+        }
+
+        return ($listing->published_at ?? $listing->created_at)?->toDateString();
+    }
+
     /** سجل تغيّر السعر — يفتح لاحقاً ميزة "انخفض السعر منذ الأسبوع الماضي" */
     private function recordPriceChange(Listing $listing): void
     {
-        if (! $listing->isDirty(['price_amount', 'currency_code'])) {
+        if (! $listing->wasChanged(['price_amount', 'currency_code'])) {
             return;
         }
 

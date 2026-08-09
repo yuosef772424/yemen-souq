@@ -26,7 +26,8 @@ final class SearchQueryBuilder
     public function __construct(
         private readonly ArabicNormalizer $normalizer,
         private readonly ExchangeRateService $rates,
-    ) {}
+    ) {
+    }
 
     public function paginate(SearchCriteria $criteria): LengthAwarePaginator
     {
@@ -142,8 +143,8 @@ final class SearchQueryBuilder
 
     private function applySort(Builder $query, SearchCriteria $criteria): void
     {
-        // المميّزة أولاً دائماً، ثم الترتيب المطلوب
-        $query->orderByDesc('is_featured');
+        // المميّزة أولاً — والنطاق يتحقق من سريان الترقية لا من العلم وحده
+        $query->featuredFirst();
 
         match ($criteria->sort) {
             // الترتيب بالسعر يجري على القيمة الموحّدة —

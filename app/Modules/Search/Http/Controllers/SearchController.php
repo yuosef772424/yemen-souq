@@ -11,6 +11,7 @@ use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Models\Location;
 use App\Modules\Shared\Services\ArabicNormalizer;
 use App\Modules\Shared\Services\ExchangeRateService;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -29,17 +30,21 @@ class SearchController
 
         // القياس حول الاستعلام نفسه فقط — لا حول تجهيز القوالب
         $startedAt = microtime(true);
-        $listings = $this->search->paginate($criteria);
+        $result = $this->search->search($criteria);
         $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
 
-        $this->recordSearch($criteria, $listings->total(), $durationMs);
+        $listings = $result['listings'];
+        $mode = $result['mode'];
+
+        $this->recordSearch($criteria, $listings->total(), $durationMs, $mode);
         $this->recordFilters($criteria, $listings->total());
         $this->recordImpressions($listings);
 
         return view('search::index', [
             'criteria' => $criteria,
             'listings' => $listings,
-            'breakdown' => $this->search->currencyBreakdown($criteria),
+            'matchMode' => $mode,
+            'breakdown' => $this->breakdown($criteria, $listings, $mode),
             'currencies' => Currency::active()->get(),
             'categories' => Category::active()->roots()->with('children')->get(),
             'governorates' => Location::active()->governorates()->get(),
@@ -49,12 +54,37 @@ class SearchController
     }
 
     /**
+     * توزيع العملات يُحسب بنفس درجة المطابقة التي أنتجت النتائج، ويُتخطّى
+     * كلياً عند صفر نتائج.
+     *
+     * كان يُحسب دائماً، أي مسح كامل ثالث للجدول في كل بحث — واحد للنتائج،
+     * وواحد لعدّاد الترقيم، وواحد للتوزيع. وعند صفر نتائج كانت الثلاثة
+     * تُنفَّذ لتعرض شريطاً فارغاً لا يقرأه أحد.
+     */
+    private function breakdown(SearchCriteria $criteria, LengthAwarePaginator $listings, string $mode): array
+    {
+        if ($listings->total() === 0) {
+            return [];
+        }
+
+        return $this->search->currencyBreakdown(
+            $criteria,
+            $mode === 'near' ? SearchQueryBuilder::MODE_LOOSE : SearchQueryBuilder::MODE_STRICT
+        );
+    }
+
+    /**
      * حدث البحث.
      *
      * يُسجَّل فقط عند وجود نية بحث فعلية — تصفّح الصفحة الأولى بلا فلاتر
      * ليس بحثاً، وتسجيله يُفسد كل إحصاءات «الاستعلامات بصفر نتائج».
+     *
+     * وmatch_mode أُضيف إلى الحمولة لأنه أهم رقم تشخيصي في المحرك:
+     * نسبة الاستعلامات التي فشلت مطابقتها التامة هي المقياس المباشر
+     * لجودة النص المجمّع والمكافئات. بلا تسجيله، التراجع إلى «الأقرب»
+     * يعمل بصمت ولا نعرف كم مرة احتاجه الناس.
      */
-    private function recordSearch(SearchCriteria $criteria, int $total, int $durationMs): void
+    private function recordSearch(SearchCriteria $criteria, int $total, int $durationMs, string $mode): void
     {
         if (! $criteria->hasQuery() && ! $criteria->hasPriceFilter()) {
             return;
@@ -65,6 +95,7 @@ class SearchController
             'q_normalized' => $this->normalizer->normalize($criteria->query),
             'results' => $total,
             'duration_ms' => $durationMs,
+            'match_mode' => $mode,
             'filters' => $criteria->activeFilterKeys(),
             'price_currency' => $criteria->hasPriceFilter() ? $criteria->priceCurrency : null,
             'sort' => $criteria->sort,
@@ -83,7 +114,7 @@ class SearchController
     }
 
     /** ظهور كل نتيجة مع موضعها — البسط في حساب نسبة النقر */
-    private function recordImpressions($listings): void
+    private function recordImpressions(LengthAwarePaginator $listings): void
     {
         if ($listings->isEmpty()) {
             return;

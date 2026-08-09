@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Modules\Catalog\Database\Seeders\ListingSeeder;
+use App\Modules\Search\Database\Seeders\SynonymSeeder;
 use App\Modules\Shared\Database\Seeders\CategorySeeder;
 use App\Modules\Shared\Database\Seeders\CurrencySeeder;
 use App\Modules\Shared\Database\Seeders\LocationSeeder;
@@ -16,6 +17,7 @@ class DatabaseSeeder extends Seeder
             CurrencySeeder::class,
             LocationSeeder::class,
             CategorySeeder::class,
+            SynonymSeeder::class,
             ListingSeeder::class,
         ]);
     }

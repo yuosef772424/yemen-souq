@@ -2,6 +2,8 @@
 
 @section('title', $criteria->hasQuery() ? "نتائج البحث عن {$criteria->query}" : 'تصفح الإعلانات')
 
+@php $matchMode = $matchMode ?? 'browse'; @endphp
+
 @section('content')
 
 <form method="GET" action="{{ route('search') }}"
@@ -11,6 +13,7 @@
     <div class="flex gap-2">
         <label class="sr-only" for="q">كلمة البحث</label>
         <input id="q" name="q" type="search" value="{{ $criteria->query }}"
+               maxlength="{{ \App\Modules\Search\DTO\SearchCriteria::MAX_QUERY_LENGTH }}"
                placeholder="ابحث عن سيارة، شقة، جوال…"
                class="min-w-0 flex-1 rounded-xl border border-line bg-white px-4 py-3 text-base placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20">
 
@@ -57,6 +60,20 @@
                 </label>
             </div>
 
+            {{--
+                التراجع يُعلَن، ولا يُخفى.
+
+                عرض نتائج «أقرب» كما لو كانت مطابقة تامة يُربك المستخدم:
+                يرى إعلانات لا تحمل كل كلماته فيحسب المحرك مكسوراً. الجملة
+                الواحدة هنا تحوّل الشعور من «البحث لا يفهمني» إلى «لا يوجد
+                ما طلبته بالضبط، وهذه البدائل».
+            --}}
+            @if ($matchMode === 'near')
+                <p role="status" class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    لا يوجد إعلان يطابق كل كلماتك. هذه أقرب النتائج، مرتّبة بعدد الكلمات المطابقة.
+                </p>
+            @endif
+
             {{-- توزيع العملات: يُظهر للمستخدم أن النتائج مختلطة العملات بدل أن يفاجأ --}}
             @if (count($breakdown) > 1)
                 <div class="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-tint p-3 text-xs">
@@ -74,6 +91,14 @@
             @if ($listings->isEmpty())
                 <div class="mt-10 rounded-2xl border border-dashed border-line bg-white px-6 py-14 text-center">
                     <p class="text-base font-semibold">لا توجد إعلانات مطابقة</p>
+
+                    @if ($matchMode === 'none')
+                        {{-- المستخدم يستحق أن يعرف أننا لم نكتفِ بمحاولة واحدة --}}
+                        <p class="mt-2 text-sm text-muted">
+                            جرّبنا كلماتك مجتمعةً، ثم كل كلمة على حدة ومعها مكافئاتها — بلا نتيجة.
+                        </p>
+                    @endif
+
                     <p class="mt-2 text-sm text-muted">
                         وسّع النطاق السعري، أو أزل بعض الفلاتر، أو جرّب كلمة أعم.
                     </p>
@@ -85,13 +110,13 @@
             @else
                 <ul class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     @foreach ($listings as $i => $listing)
-    @include('search::partials.listing-card', [
-        'listing' => $listing,
-        'baseCurrency' => $baseCurrency,
-        'position' => ($listings->firstItem() ?? 1) + $i,
-        'queryNormalized' => $criteria->query,
-    ])
-@endforeach
+                        @include('search::partials.listing-card', [
+                            'listing' => $listing,
+                            'baseCurrency' => $baseCurrency,
+                            'position' => ($listings->firstItem() ?? 1) + $i,
+                            'queryNormalized' => $criteria->query,
+                        ])
+                    @endforeach
                 </ul>
 
                 <div class="mt-8">

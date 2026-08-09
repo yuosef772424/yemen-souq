@@ -44,10 +44,8 @@ class ListingStatsTest extends TestCase
     }
 
     /**
-     * الأرقام تُفحص على القارئ لا على HTML الصفحة.
-     *
-     * assertSee('20') على صفحة تحمل تواريخ مثل 2026-08-10 ينجح بلا أي
-     * علاقة بالمجموع — اختبار يمر دائماً أسوأ من اختبار غائب.
+     * الأرقام تُفحص على القارئ لا على HTML الصفحة: assertSee('20') على
+     * صفحة تحمل تواريخ مثل 2026-08-10 ينجح بلا أي علاقة بالمجموع.
      */
     #[Test]
     public function the_reader_totals_only_the_stored_days(): void
@@ -68,9 +66,7 @@ class ListingStatsTest extends TestCase
     {
         $this->storeDay(now()->subDays(40)->toDateString(), ['views' => 500]);
 
-        $stats = app(ListingStatsReader::class)->forListing($this->listing);
-
-        $this->assertSame(0, $stats['totals']['views']);
+        $this->assertSame(0, app(ListingStatsReader::class)->forListing($this->listing)['totals']['views']);
     }
 
     #[Test]
@@ -93,12 +89,6 @@ class ListingStatsTest extends TestCase
             ->assertForbidden();
     }
 
-    /**
-     * الفراغ يجب أن يقول سببه.
-     *
-     * جدول أصفار بلا تفسير يقول للمعلن «لم يرَك أحد»، والصحيح «لم يُحسب
-     * بعد». المعنيان مختلفان تماماً، والثاني يُصلَح بأمر واحد.
-     */
     #[Test]
     public function an_empty_rollup_says_so_instead_of_showing_bare_zeros(): void
     {
@@ -108,12 +98,6 @@ class ListingStatsTest extends TestCase
             ->assertSee('analytics:rollup');
     }
 
-    /**
-     * زيارة المالك لإعلانه لا تُحسب.
-     *
-     * بلا هذا الشرط يكون الرقم الذي جاء المعلن ليقرأه من صنعه هو —
-     * وأسوأ من رقم مفقود رقمٌ يبدو صحيحاً وليس كذلك.
-     */
     #[Test]
     public function the_owners_own_visit_is_not_counted(): void
     {
@@ -134,13 +118,27 @@ class ListingStatsTest extends TestCase
         $this->assertSame(1, (int) $this->listing->fresh()->views_count);
     }
 
-    /** المالك يعاين إعلاناً موقوفاً؛ الزائر لا يجده */
     #[Test]
-    public function the_owner_may_preview_a_paused_listing_but_a_visitor_may_not(): void
+    public function the_owner_may_preview_a_paused_listing(): void
     {
         $this->listing->forceFill(['status' => 'paused'])->save();
 
         $this->actingAs($this->owner)->get(route('listing.show', $this->listing))->assertOk();
+    }
+
+    /**
+     * اختبار منفصل لا سطر ثانٍ في الاختبار السابق.
+     *
+     * actingAs يثبّت المستخدم لبقية دالة الاختبار كلها، فطلبٌ «كزائر»
+     * بعد actingAs يبقى مسجَّلاً — والاختبار كان يقيس المالك مرتين
+     * ويظن أنه قاس الزائر. الفصل هو الإصلاح الصحيح، لا Auth::logout
+     * في المنتصف: حالتان مختلفتان تستحقان اسمين مختلفين.
+     */
+    #[Test]
+    public function a_visitor_may_not_see_a_paused_listing(): void
+    {
+        $this->listing->forceFill(['status' => 'paused'])->save();
+
         $this->get(route('listing.show', $this->listing))->assertNotFound();
     }
 }

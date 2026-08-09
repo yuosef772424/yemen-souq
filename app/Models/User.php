@@ -13,23 +13,22 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 /**
- * كان هذا الملف نسخة لارافل الافتراضية بلا تعديل، بينما تعتمد عليه
- * وحدة الهوية بأربع طرق غير موجودة: phone في fillable، وdisplayName،
- * وhasVerifiedPhone، وmarkPhoneAsVerified، وعلاقة trackingPreferences
- * التي يقرأها EventRecorder لكل مستخدم مسجَّل.
+ * كل ما تستدعيه وحدة الهوية من هذا النموذج، في مكان واحد.
  *
- * الأعمدة موجودة في هجرة الهوية (000200) منذ البداية — الناقص كان
- * النموذج وحده. ولهذا كانت اختبارات الهوية تسقط كلها بينما تبدو
- * الهجرة سليمة.
+ * أُضيفت isActive() هنا: كان LoginController يناديها وهي غير موجودة،
+ * فيُلقى BadMethodCallException *بعد* نجاح Auth::attempt — أي أن
+ * المستخدم يُسجَّل دخوله ثم يرى صفحة خطأ 500. ولذلك بدت أعراضها
+ * متناقضة: assertAuthenticatedAs ينجح وassertRedirect يسقط في نفس
+ * المسار. هذا هو نوع العطل الذي يضيّع ساعة قبل أن يُفهم.
  */
 class User extends Authenticatable
 {
     use HasFactory, Notifiable, SoftDeletes;
 
     /**
-     * phone قابل للتعيين الجماعي، وphone_verified_at ليس كذلك بقصد:
-     * التوثيق لا يجوز أن يأتي من طلب HTTP. يُكتب بـforceFill في
-     * markPhoneAsVerified فقط، بعد التحقق من الرمز.
+     * phone قابل للتعيين الجماعي، وphone_verified_at وstatus ليسا كذلك
+     * بقصد: التوثيق والإيقاف قرارا نظامٍ لا حقلا نموذجٍ يملؤهما المستخدم.
+     * يُكتبان بـforceFill من الموضع الذي يملك القرار.
      */
     protected $fillable = [
         'name',
@@ -74,10 +73,8 @@ class User extends Authenticatable
 
     /**
      * الاسم المعروض يأتي من الملف الشخصي، ويرجع إلى name عند غيابه.
-     *
-     * القالب يستدعي هذه الطريقة في كل صفحة لمستخدم مسجَّل، فلا يجوز
-     * أن تفترض وجود صف user_profiles — مستخدم أُنشئ من factory أو من
-     * seeder لا يملك واحداً.
+     * القالب يناديها لكل مستخدم مسجَّل، فلا يجوز أن تفترض وجود صف
+     * user_profiles — مستخدم من factory أو seeder لا يملك واحداً.
      */
     public function displayName(): string
     {
@@ -96,5 +93,18 @@ class User extends Authenticatable
         }
 
         $this->forceFill(['phone_verified_at' => now()])->save();
+    }
+
+    /**
+     * الحساب العامل.
+     *
+     * القيمة الافتراضية في المخطط 'active'، لكن الشرط مكتوب صراحةً على
+     * 'active' لا على «ليس موقوفاً»: إضافة حالة رابعة لاحقاً
+     * (مثل pending_review) يجب أن تُقصي صاحبها حتى يُقرَّر فيها، لا أن
+     * تمرّ لأنها ليست في قائمة الممنوعات.
+     */
+    public function isActive(): bool
+    {
+        return ($this->status ?? 'active') === 'active';
     }
 }

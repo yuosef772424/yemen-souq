@@ -3,6 +3,7 @@
 namespace Tests\Feature\Catalog;
 
 use App\Models\User;
+use App\Modules\Catalog\Models\Listing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\Support\SeedsCatalog;
@@ -12,8 +13,8 @@ use Tests\TestCase;
  * التجديد.
  *
  * الاختبار الثاني هو حجر الزاوية: تجديد يحرّك published_at يحوّل زر
- * التجديد إلى ترقية مجانية، فيفقد ترتيب «الأحدث» معناه ويبدو إعلان
- * عمره سنة جديداً. لو حُذف هذا الاختبار لسقط القرار بلا أن يلاحظه أحد.
+ * التجديد إلى ترقية مجانية، فيبدو إعلان عمره سنة جديداً ويفقد ترتيب
+ * «الأحدث» معناه.
  */
 class ListingRenewTest extends TestCase
 {
@@ -31,6 +32,23 @@ class ListingRenewTest extends TestCase
 
         $this->owner = User::factory()->create();
         $this->stranger = User::factory()->create();
+    }
+
+    /**
+     * إرجاع الإعلان إلى ما بعد الانتهاء بالكتابة المباشرة.
+     *
+     * الصيغة السابقة كانت forceFill(['expires_at' => now()->subDay()]) على
+     * الكائن نفسه بعد التجديد الأول — وهي هشّة: إن نُفِّذ السطران في نفس
+     * الثانية فالقيمة الجديدة تساوي القيمة الأصلية المحفوظة في الكائن،
+     * فلا يعدّها Eloquent «متغيّرة» ولا يكتب شيئاً، فيسقط الاختبار حسب
+     * توقيت التشغيل. اختبار يسقط بالساعة أسوأ من اختبار يسقط دائماً:
+     * الأول يُعلَّم «متقلّب» ويُتجاهل.
+     */
+    private function expireNow(Listing $listing): void
+    {
+        Listing::withoutEvents(fn () => Listing::query()
+            ->whereKey($listing->getKey())
+            ->update(['expires_at' => now()->subDays(2)]));
     }
 
     #[Test]
@@ -131,7 +149,7 @@ class ListingRenewTest extends TestCase
 
         $this->actingAs($this->owner)->post(route('account.listings.renew', $listing));
 
-        $listing->forceFill(['expires_at' => now()->subDay()])->save();
+        $this->expireNow($listing);
 
         $this->actingAs($this->owner)->post(route('account.listings.renew', $listing));
 

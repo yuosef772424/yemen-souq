@@ -8,23 +8,33 @@ use Illuminate\Http\Request;
 /**
  * معايير البحث كوحدة واحدة غير قابلة للتغيير.
  *
- * لماذا كائن بدل تمرير عشرة معاملات: الفلاتر تتزايد مع الوقت،
- * وتوقيع دالة بعشرة معاملات يصبح غير قابل للقراءة أو الاختبار.
- * وهذا أيضاً المكان الوحيد الذي يعرف كيف تُقرأ الفلاتر من الطلب —
- * ولذلك هو المكان الصحيح للتحقق منها.
+ * الثغرة المُسدَّدة هنا: كل القراءات كانت تمر بـ$request->string()، وهي
+ * تُمرِّر القيمة إلى Stringable الذي يحوّلها بـ(string). والرابط
+ * ?q[]=x يعطي مصفوفة، فـ(string)array يُطلق تحذير PHP، ولارافل يحوّل
+ * التحذيرات إلى ErrorException — فيسقط أي أحد الصفحة الرئيسية بخطأ 500
+ * برابط واحد بلا حساب ولا أدوات. وهذا بالضبط ما تعِد به تعليقات هذا
+ * الملف نفسه: «رابط يكتبه أي أحد لا يجب أن يُسقط صفحة».
  *
- * كل قيمة قادمة من الرابط تمر بقائمة بيضاء أو تُهمَل. لا استثناء:
- * ?currency=EUR كان يصل إلى ExchangeRateService فيرمي استثناءً
- * ويُسقط صفحة عامة بخطأ 500. رابط يكتبه أي أحد لا يجب أن يُسقط صفحة.
+ * الحلّ: قراءة قياسية واحدة تُهمل كل ما ليس قيمة مفردة. القوائم البيضاء
+ * الموجودة تحمي القيم، وهذه تحمي *النوع* — وهما حاجتان مختلفتان.
  */
 final readonly class SearchCriteria
 {
-    /** الترتيبات المدعومة — أي قيمة أخرى تُهمَل بصمت */
     public const SORTS = ['newest', 'oldest', 'price_asc', 'price_desc'];
 
     public const CONDITIONS = ['new', 'like_new', 'used', 'for_parts'];
 
     public const SALE_TYPES = ['direct', 'auction'];
+
+    /**
+     * سقف طول الاستعلام.
+     *
+     * سقف الكلمات (8 في SearchTokenizer) لا يكفي: العبارة الكاملة تُستخدم
+     * كنمط LIKE واحد في ترتيب الصلة، فاستعلام بطول 50 كيلوبايت يصبح نمط
+     * LIKE بطول 50 كيلوبايت على كل صف في الجدول. 120 محرفاً أطول من أي
+     * بحث حقيقي بمراحل.
+     */
+    public const MAX_QUERY_LENGTH = 120;
 
     public function __construct(
         public ?string $query = null,
@@ -50,20 +60,69 @@ final readonly class SearchCriteria
         [$min, $max] = self::readRange($request);
 
         return new self(
-            query: $request->string('q')->trim()->value() ?: null,
-            categoryId: $request->integer('category') ?: null,
-            locationId: $request->integer('location') ?: null,
+            query: self::text($request, 'q'),
+            categoryId: self::id($request, 'category'),
+            locationId: self::id($request, 'location'),
             priceMin: $min,
             priceMax: $max,
-            priceCurrency: self::pick($request->string('currency')->upper()->value(), $currencies)
+            priceCurrency: self::pick(self::upper($request, 'currency'), $currencies)
                 ?? Currency::baseCode(),
-            listingCurrency: self::pick($request->string('listing_currency')->upper()->value(), $currencies),
-            condition: self::pick($request->string('condition')->value(), self::CONDITIONS),
-            saleType: self::pick($request->string('type')->value(), self::SALE_TYPES),
-            withImageOnly: $request->boolean('with_image'),
-            sort: self::pick($request->string('sort')->value(), self::SORTS) ?? 'newest',
-            perPage: min(max($request->integer('per_page', 24), 6), 60),
+            listingCurrency: self::pick(self::upper($request, 'listing_currency'), $currencies),
+            condition: self::pick(self::scalar($request, 'condition'), self::CONDITIONS),
+            saleType: self::pick(self::scalar($request, 'type'), self::SALE_TYPES),
+            withImageOnly: self::flag($request, 'with_image'),
+            sort: self::pick(self::scalar($request, 'sort'), self::SORTS) ?? 'newest',
+            perPage: min(max(self::id($request, 'per_page') ?? 24, 6), 60),
         );
+    }
+
+    // ---- قراءة المدخلات: النوع أولاً، ثم القيمة ----
+
+    /** قيمة مفردة أو null — مصفوفة أو كائن يُهمَل بلا خطأ */
+    private static function scalar(Request $request, string $key): ?string
+    {
+        $value = $request->input($key);
+
+        if (! is_scalar($value)) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
+    }
+
+    private static function upper(Request $request, string $key): ?string
+    {
+        $value = self::scalar($request, $key);
+
+        return $value === null ? null : mb_strtoupper($value);
+    }
+
+    /** نص البحث: مقصوص بحدّ الطول قبل أن يصل إلى أي استعلام */
+    private static function text(Request $request, string $key): ?string
+    {
+        $value = self::scalar($request, $key);
+
+        return $value === null ? null : mb_substr($value, 0, self::MAX_QUERY_LENGTH);
+    }
+
+    private static function id(Request $request, string $key): ?int
+    {
+        $value = self::scalar($request, $key);
+
+        if ($value === null || ! is_numeric($value)) {
+            return null;
+        }
+
+        $id = (int) $value;
+
+        return $id > 0 ? $id : null;
+    }
+
+    private static function flag(Request $request, string $key): bool
+    {
+        return in_array(self::scalar($request, $key), ['1', 'true', 'on', 'yes'], true);
     }
 
     /** القيمة إن كانت في القائمة البيضاء، وإلا null */
@@ -79,30 +138,33 @@ final readonly class SearchCriteria
     /**
      * حدود النطاق السعري.
      *
-     * السالب يُهمَل (لا سعر سالب)، والحدّان المنقلبان يُعكسان بدل
-     * إرجاع صفر نتائج. المستخدم الذي يكتب "من 500 إلى 100" يعني
-     * النطاق نفسه — وصفحة فارغة بلا تفسير تُقرأ كعطل في المنصة.
-     *
-     * @return array{0: ?float, 1: ?float}
+     * السالب يُهمَل، والحدّان المنقلبان يُعكسان بدل إرجاع صفر نتائج.
+     * وغير الرقمي يُهمَل: (float)'abc' كان يعطي 0.0 فيتحوّل «من abc»
+     * إلى «من صفر» — حدّ لم يطلبه أحد.
      */
     private static function readRange(Request $request): array
     {
-        $min = $request->filled('min') ? (float) $request->input('min') : null;
-        $max = $request->filled('max') ? (float) $request->input('max') : null;
-
-        if ($min !== null && $min < 0) {
-            $min = null;
-        }
-
-        if ($max !== null && $max < 0) {
-            $max = null;
-        }
+        $min = self::amount($request, 'min');
+        $max = self::amount($request, 'max');
 
         if ($min !== null && $max !== null && $min > $max) {
             [$min, $max] = [$max, $min];
         }
 
         return [$min, $max];
+    }
+
+    private static function amount(Request $request, string $key): ?float
+    {
+        $value = self::scalar($request, $key);
+
+        if ($value === null || ! is_numeric($value)) {
+            return null;
+        }
+
+        $amount = (float) $value;
+
+        return $amount < 0 ? null : $amount;
     }
 
     public function hasQuery(): bool

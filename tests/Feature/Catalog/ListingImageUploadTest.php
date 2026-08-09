@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Catalog;
 
+use App\Models\User;
 use App\Modules\Catalog\Models\Listing;
 use App\Modules\Catalog\Services\ListingImageService;
 use App\Modules\Shared\Models\Category;
@@ -10,10 +11,21 @@ use App\Modules\Shared\Models\ExchangeRate;
 use App\Modules\Shared\Models\Location;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
+/**
+ * كُتب هذا الملف قبل وجود المصادقة، فكان ينشر إعلاناً بلا حساب عبر
+ * DemoUser. بعد إضافة بوابة النشر صار كل POST يُعاد توجيهه إلى /login،
+ * فسقطت الخمسة عشر اختباراً — لا لعيب في معالجة الصور بل لأن الاختبار
+ * يفترض عالماً لم يبق قائماً.
+ *
+ * الإصلاح هو تسجيل الدخول في setUp، لا تخفيف الحماية في المسار:
+ * الاختبار هو ما تخلّف عن الكود، ولوحة المعلن كلها تعتمد على أن
+ * /add محميّ فعلاً.
+ */
 class ListingImageUploadTest extends TestCase
 {
     use RefreshDatabase;
@@ -21,6 +33,8 @@ class ListingImageUploadTest extends TestCase
     private Category $category;
 
     private Location $location;
+
+    private User $user;
 
     protected function setUp(): void
     {
@@ -42,6 +56,17 @@ class ListingImageUploadTest extends TestCase
         $this->location = Location::create([
             'name_ar' => 'صنعاء', 'slug' => 'sanaa', 'level' => 'governorate', 'path' => '',
         ]);
+
+        $this->user = User::create([
+            'name' => 'معلن مختبَر',
+            'phone' => '+967771234567',
+            'email' => 'publisher@example.test',
+            'password' => Hash::make('password1234'),
+        ]);
+
+        $this->user->markPhoneAsVerified();
+
+        $this->actingAs($this->user);
     }
 
     private function payload(array $overrides = []): array
@@ -72,6 +97,15 @@ class ListingImageUploadTest extends TestCase
 
         $response->assertRedirect(route('listing.show', $listing));
         $this->assertCount(2, $listing->images);
+    }
+
+    /** الإعلان يُنسب إلى الحساب المسجَّل لا إلى مستخدم تجريبي */
+    #[Test]
+    public function the_listing_belongs_to_the_signed_in_account(): void
+    {
+        $this->post(route('listing.store'), $this->payload());
+
+        $this->assertSame($this->user->id, Listing::firstOrFail()->user_id);
     }
 
     #[Test]
@@ -107,9 +141,7 @@ class ListingImageUploadTest extends TestCase
             'images' => [UploadedFile::fake()->image('huge.jpg', 4000, 3000)],
         ]));
 
-        $image = Listing::firstOrFail()->images()->firstOrFail();
-
-        $this->assertLessThanOrEqual(1600, $image->width);
+        $this->assertLessThanOrEqual(1600, Listing::firstOrFail()->images()->firstOrFail()->width);
     }
 
     #[Test]
@@ -147,32 +179,27 @@ class ListingImageUploadTest extends TestCase
     #[Test]
     public function non_image_files_are_rejected(): void
     {
-        $response = $this->post(route('listing.store'), $this->payload([
+        $this->post(route('listing.store'), $this->payload([
             'images' => [UploadedFile::fake()->create('malware.pdf', 100, 'application/pdf')],
-        ]));
+        ]))->assertSessionHasErrors('images.0');
 
-        $response->assertSessionHasErrors('images.0');
         $this->assertSame(0, Listing::count());
     }
 
     #[Test]
     public function files_over_the_size_limit_are_rejected(): void
     {
-        $response = $this->post(route('listing.store'), $this->payload([
+        $this->post(route('listing.store'), $this->payload([
             'images' => [UploadedFile::fake()->image('big.jpg')->size(9000)],
-        ]));
-
-        $response->assertSessionHasErrors('images.0');
+        ]))->assertSessionHasErrors('images.0');
     }
 
     #[Test]
     public function tiny_images_are_rejected(): void
     {
-        $response = $this->post(route('listing.store'), $this->payload([
+        $this->post(route('listing.store'), $this->payload([
             'images' => [UploadedFile::fake()->image('icon.jpg', 50, 50)],
-        ]));
-
-        $response->assertSessionHasErrors('images.0');
+        ]))->assertSessionHasErrors('images.0');
     }
 
     #[Test]

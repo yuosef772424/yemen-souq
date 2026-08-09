@@ -13,26 +13,23 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 /**
- * الحساب.
+ * كان هذا الملف نسخة لارافل الافتراضية بلا تعديل، بينما تعتمد عليه
+ * وحدة الهوية بأربع طرق غير موجودة: phone في fillable، وdisplayName،
+ * وhasVerifiedPhone، وmarkPhoneAsVerified، وعلاقة trackingPreferences
+ * التي يقرأها EventRecorder لكل مستخدم مسجَّل.
  *
- * قناة التوثيق هي الهاتف لا البريد: في السوق اليمني يُبدَّل البريد ولا
- * يُبدَّل الرقم، وكثير من المعلنين لا بريد لهم عملياً. والرقم هو أيضاً
- * وسيلة التواصل التي تظهر في الإعلان، فتوثيقه يخدم المشتري لا التسجيل فقط.
- *
- * لإضافة تأكيد البريد لاحقاً — عمود email_verified_at موجود أصلاً:
- *   1. أضف: implements \Illuminate\Contracts\Auth\MustVerifyEmail
- *   2. أضف ->middleware('verified') على المسارات التي تريد حجبها
- *   3. سجّل مسارات لارافيل الجاهزة للتحقق
- * لا يحتاج هجرة ولا تغييراً في أي مكان آخر.
+ * الأعمدة موجودة في هجرة الهوية (000200) منذ البداية — الناقص كان
+ * النموذج وحده. ولهذا كانت اختبارات الهوية تسقط كلها بينما تبدو
+ * الهجرة سليمة.
  */
 class User extends Authenticatable
 {
     use HasFactory, Notifiable, SoftDeletes;
 
     /**
-     * status غائب عن هذه القائمة بقصد: من يملك تعديل حالته يملك رفع الحظر
-     * عن نفسه. الحالة تُغيَّر بكود صريح، لا بتمرير حقل في طلب HTTP.
-     * وphone_verified_at كذلك — يُكتب بعد التحقق فقط.
+     * phone قابل للتعيين الجماعي، وphone_verified_at ليس كذلك بقصد:
+     * التوثيق لا يجوز أن يأتي من طلب HTTP. يُكتب بـforceFill في
+     * markPhoneAsVerified فقط، بعد التحقق من الرمز.
      */
     protected $fillable = [
         'name',
@@ -63,41 +60,41 @@ class User extends Authenticatable
         return $this->hasOne(UserProfile::class);
     }
 
-    /**
-     * تفضيلات التتبع — يقرأها EventRecorder لاحترام الانسحاب.
-     * اسم الدالة يجب أن يبقى trackingPreferences: الوحدة تستدعيه بهذا الاسم.
-     */
-    public function trackingPreferences(): HasOne
-    {
-        return $this->hasOne(TrackingPreference::class, 'user_id');
-    }
-
     public function listings(): HasMany
     {
         return $this->hasMany(Listing::class);
     }
 
-    // ---- الحالة ----
-
-    public function isActive(): bool
+    public function trackingPreferences(): HasOne
     {
-        return $this->status === 'active';
+        return $this->hasOne(TrackingPreference::class);
+    }
+
+    // ---- الهوية ----
+
+    /**
+     * الاسم المعروض يأتي من الملف الشخصي، ويرجع إلى name عند غيابه.
+     *
+     * القالب يستدعي هذه الطريقة في كل صفحة لمستخدم مسجَّل، فلا يجوز
+     * أن تفترض وجود صف user_profiles — مستخدم أُنشئ من factory أو من
+     * seeder لا يملك واحداً.
+     */
+    public function displayName(): string
+    {
+        return $this->profile?->display_name ?: $this->name;
     }
 
     public function hasVerifiedPhone(): bool
     {
-        return $this->phone_verified_at !== null;
+        return $this->phone !== null && $this->phone_verified_at !== null;
     }
 
     public function markPhoneAsVerified(): void
     {
-        // خارج fillable، فيُكتب هنا صراحةً
-        $this->forceFill(['phone_verified_at' => now()])->save();
-    }
+        if ($this->phone_verified_at !== null) {
+            return;
+        }
 
-    /** الاسم المعروض في الإعلانات — من الملف الشخصي إن وُجد */
-    public function displayName(): string
-    {
-        return $this->profile?->display_name ?? $this->name;
+        $this->forceFill(['phone_verified_at' => now()])->save();
     }
 }

@@ -21,8 +21,7 @@ class ContactRevealController
 {
     public function __construct(
         private readonly EventRecorder $events,
-    ) {
-    }
+    ) {}
 
     public function __invoke(Listing $listing): JsonResponse
     {

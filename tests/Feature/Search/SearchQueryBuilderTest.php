@@ -19,8 +19,11 @@ class SearchQueryBuilderTest extends TestCase
     use RefreshDatabase;
 
     private SearchQueryBuilder $search;
+
     private User $user;
+
     private Category $category;
+
     private Location $location;
 
     protected function setUp(): void
@@ -117,7 +120,7 @@ class SearchQueryBuilderTest extends TestCase
         $this->listing(['price_amount' => null, 'currency_code' => null, 'price_type' => 'on_request']);
         $this->listing(['price_amount' => 500, 'currency_code' => 'YER']);
 
-        $this->assertCount(2, $this->search->build(new SearchCriteria())->get());
+        $this->assertCount(2, $this->search->build(new SearchCriteria)->get());
     }
 
     #[Test]
@@ -187,7 +190,7 @@ class SearchQueryBuilderTest extends TestCase
         $normal = $this->listing(['title' => 'إعلان عادي']);
         $featured = $this->listing(['title' => 'إعلان مميز', 'is_featured' => true]);
 
-        $results = $this->search->build(new SearchCriteria())->get();
+        $results = $this->search->build(new SearchCriteria)->get();
 
         $this->assertSame($featured->id, $results->first()->id);
         $this->assertSame($normal->id, $results->last()->id);
@@ -199,7 +202,7 @@ class SearchQueryBuilderTest extends TestCase
         $this->listing(['status' => 'draft']);
         $this->listing(['status' => 'active']);
 
-        $this->assertCount(1, $this->search->build(new SearchCriteria())->get());
+        $this->assertCount(1, $this->search->build(new SearchCriteria)->get());
     }
 
     #[Test]
@@ -209,7 +212,7 @@ class SearchQueryBuilderTest extends TestCase
         $this->listing(['currency_code' => 'YER']);
         $this->listing(['currency_code' => 'USD']);
 
-        $breakdown = $this->search->currencyBreakdown(new SearchCriteria());
+        $breakdown = $this->search->currencyBreakdown(new SearchCriteria);
 
         $this->assertSame(2, $breakdown['YER']);
         $this->assertSame(1, $breakdown['USD']);

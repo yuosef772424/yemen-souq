@@ -28,16 +28,19 @@ class StoreListingRequest extends FormRequest
 
             'condition_type' => ['nullable', Rule::in(['new', 'like_new', 'used', 'for_parts'])],
             'contact_phone' => ['required', 'string', 'regex:/^\+?[0-9\s\-]{9,20}$/'],
+            // بلا هذه القاعدة يستبعده safe() فلا يُحفظ أبداً،
+            // ويتجاهل النظام طلب المعلن بإخفاء رقمه
+            'hide_phone' => ['nullable', 'boolean'],
 
             // الصور اختيارية — إعلان بلا صورة أفضل من إعلان لم يُنشر
-            'images' => ['nullable', 'array', 'max:' . ListingImageService::MAX_PER_LISTING],
+            'images' => ['nullable', 'array', 'max:'.ListingImageService::MAX_PER_LISTING],
             'images.*' => [
                 'file',
                 // قاعدة image تفحص المحتوى لا الامتداد، فملف PDF مُعاد تسميته يُرفض
                 'image',
                 'mimes:jpeg,jpg,png,webp',
                 'max:8192',
-               'dimensions:min_width=120,min_height=120,max_width=8000,max_height=8000',
+                'dimensions:min_width=120,min_height=120,max_width=8000,max_height=8000',
             ],
         ];
     }
@@ -53,7 +56,7 @@ class StoreListingRequest extends FormRequest
             'currency_code.required_with' => 'اختر عملة السعر.',
             'contact_phone.required' => 'أدخل رقم تواصل.',
             'contact_phone.regex' => 'رقم التواصل غير صالح.',
-            'images.max' => 'الحد الأقصى ' . ListingImageService::MAX_PER_LISTING . ' صور.',
+            'images.max' => 'الحد الأقصى '.ListingImageService::MAX_PER_LISTING.' صور.',
             'images.*.image' => 'أحد الملفات ليس صورة صالحة.',
             'images.*.mimes' => 'الصيغ المقبولة: JPG أو PNG أو WebP. صور HEIC من الآيفون تحتاج تحويلاً أولاً.',
             'images.*.max' => 'حجم كل صورة يجب أن يكون أقل من 8 ميجابايت.',
@@ -67,6 +70,8 @@ class StoreListingRequest extends FormRequest
         if (in_array($this->input('price_type'), ['free', 'on_request'], true)) {
             $this->merge(['price_amount' => null, 'currency_code' => null]);
         }
+
+        $this->merge(['hide_phone' => $this->boolean('hide_phone')]);
 
         if (is_string($phone = $this->input('contact_phone'))) {
             $this->merge(['contact_phone' => preg_replace('/[\s\-]/', '', $phone)]);

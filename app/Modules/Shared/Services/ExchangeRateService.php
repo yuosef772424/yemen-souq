@@ -4,8 +4,8 @@ namespace App\Modules\Shared\Services;
 
 use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Models\ExchangeRate;
-use InvalidArgumentException;
 use Illuminate\Support\Facades\Cache;
+use InvalidArgumentException;
 
 /**
  * تحويل المبالغ إلى عملة الأساس لأغراض المقارنة والفلترة.
@@ -120,7 +120,7 @@ final class ExchangeRateService
     public function flushCache(): void
     {
         foreach (Currency::pluck('code') as $code) {
-            Cache::forget("rate:{$code}:" . now()->toDateString());
+            Cache::forget("rate:{$code}:".now()->toDateString());
         }
     }
 }

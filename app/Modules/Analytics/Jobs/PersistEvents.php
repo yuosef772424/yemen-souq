@@ -24,8 +24,7 @@ class PersistEvents implements ShouldQueue
 
     public function __construct(
         private readonly array $rows,
-    ) {
-    }
+    ) {}
 
     public function handle(): void
     {

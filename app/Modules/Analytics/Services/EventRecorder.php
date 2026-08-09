@@ -27,6 +27,7 @@ use Illuminate\Support\Str;
 final class EventRecorder
 {
     public const ANON_COOKIE = 'sq_anon';
+
     private const SESSION_KEY = 'sq_session_id';
 
     /** @var array<int, array<string, mixed>> */
@@ -34,8 +35,7 @@ final class EventRecorder
 
     public function __construct(
         private readonly Request $request,
-    ) {
-    }
+    ) {}
 
     public function record(
         EventName $event,

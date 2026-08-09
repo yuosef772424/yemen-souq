@@ -21,8 +21,7 @@ class ListingObserver
     public function __construct(
         private readonly ArabicNormalizer $normalizer,
         private readonly ExchangeRateService $rates,
-    ) {
-    }
+    ) {}
 
     public function saving(Listing $listing): void
     {
@@ -58,7 +57,7 @@ class ListingObserver
         // العربية لا تنتج slug مفيداً، فنعتمد على معرّف عشوائي قصير
         $base = Str::slug($listing->title) ?: 'listing';
 
-        $listing->slug = $base . '-' . Str::lower(Str::random(8));
+        $listing->slug = $base.'-'.Str::lower(Str::random(8));
     }
 
     /**

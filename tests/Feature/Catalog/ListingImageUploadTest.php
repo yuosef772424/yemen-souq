@@ -19,6 +19,7 @@ class ListingImageUploadTest extends TestCase
     use RefreshDatabase;
 
     private Category $category;
+
     private Location $location;
 
     protected function setUp(): void
@@ -125,11 +126,11 @@ class ListingImageUploadTest extends TestCase
     public function only_the_first_image_is_primary(): void
     {
         $this->post(route('listing.store'), $this->payload([
-          'images' => [
-    UploadedFile::fake()->image('a.jpg', 600, 400),
-    UploadedFile::fake()->image('b.jpg', 600, 400),
-    UploadedFile::fake()->image('c.jpg', 600, 400),
-],
+            'images' => [
+                UploadedFile::fake()->image('a.jpg', 600, 400),
+                UploadedFile::fake()->image('b.jpg', 600, 400),
+                UploadedFile::fake()->image('c.jpg', 600, 400),
+            ],
         ]));
 
         $this->assertCount(1, Listing::firstOrFail()->images()->where('is_primary', true)->get());
@@ -214,9 +215,9 @@ class ListingImageUploadTest extends TestCase
     {
         $this->post(route('listing.store'), $this->payload([
             'images' => [
-    UploadedFile::fake()->image('a.jpg', 600, 400),
-    UploadedFile::fake()->image('b.jpg', 600, 400),
-],
+                UploadedFile::fake()->image('a.jpg', 600, 400),
+                UploadedFile::fake()->image('b.jpg', 600, 400),
+            ],
         ]));
 
         $listing = Listing::firstOrFail();
@@ -234,9 +235,9 @@ class ListingImageUploadTest extends TestCase
     {
         $this->post(route('listing.store'), $this->payload([
             'images' => [
-    UploadedFile::fake()->image('a.jpg', 600, 400),
-    UploadedFile::fake()->image('b.jpg', 600, 400),
-],
+                UploadedFile::fake()->image('a.jpg', 600, 400),
+                UploadedFile::fake()->image('b.jpg', 600, 400),
+            ],
         ]));
 
         $listing = Listing::firstOrFail();

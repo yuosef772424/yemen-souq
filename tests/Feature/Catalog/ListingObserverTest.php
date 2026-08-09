@@ -17,7 +17,9 @@ class ListingObserverTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+
     private Category $category;
+
     private Location $location;
 
     protected function setUp(): void

@@ -26,8 +26,7 @@ final class SearchQueryBuilder
     public function __construct(
         private readonly ArabicNormalizer $normalizer,
         private readonly ExchangeRateService $rates,
-    ) {
-    }
+    ) {}
 
     public function paginate(SearchCriteria $criteria): LengthAwarePaginator
     {

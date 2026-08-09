@@ -2,9 +2,9 @@
 
 namespace App\Modules\Shared\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Builder;
 
 class Currency extends Model
 {
@@ -54,6 +54,6 @@ class Currency extends Model
             return '—';
         }
 
-        return number_format((float) $amount, $this->decimals) . ' ' . $this->symbol;
+        return number_format((float) $amount, $this->decimals).' '.$this->symbol;
     }
 }

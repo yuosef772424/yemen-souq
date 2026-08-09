@@ -1,12 +1,13 @@
 <?php
 
+use App\Modules\Analytics\Providers\AnalyticsServiceProvider;
+use App\Modules\Catalog\Providers\CatalogServiceProvider;
 use App\Providers\AppServiceProvider;
+use App\Providers\ModuleServiceProvider;
 
 return [
-    App\Providers\AppServiceProvider::class,
-    App\Providers\ModuleServiceProvider::class,
-    App\Modules\Catalog\Providers\CatalogServiceProvider::class,
-    App\Modules\Analytics\Providers\AnalyticsServiceProvider::class,
+    AppServiceProvider::class,
+    ModuleServiceProvider::class,
+    CatalogServiceProvider::class,
+    AnalyticsServiceProvider::class,
 ];
-
-

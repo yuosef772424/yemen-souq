@@ -102,7 +102,7 @@ class ListingFactory extends Factory
             'sale_type' => 'direct',
             'condition_type' => $this->faker->randomElement(['new', 'like_new', 'used', 'used']),
             'status' => 'active',
-            'contact_phone' => '+9677' . $this->faker->numerify('########'),
+            'contact_phone' => '+9677'.$this->faker->numerify('########'),
             'is_featured' => $this->faker->boolean(10),
             'published_at' => $this->faker->dateTimeBetween('-60 days', 'now'),
             'expires_at' => now()->addDays(30),

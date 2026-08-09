@@ -21,11 +21,10 @@ return new class extends Migration
             $table->unsignedBigInteger('winning_bid_id')->nullable()
                 ->comment('بلا مفتاح أجنبي — تجنباً لاعتماد دائري مع bids');
             $table->dateTime('starts_at');
-$table->dateTime('ends_at');
+            $table->dateTime('ends_at');
             $table->boolean('extends_on_late_bid')->default(true)->comment('تمديد تلقائي لمنع القنص');
             $table->enum('status', ['scheduled', 'running', 'ended', 'cancelled'])->default('scheduled');
             $table->timestamps();
-            
 
             $table->index(['status', 'ends_at']);
             $table->foreign('currency_code')->references('code')->on('currencies')->restrictOnDelete();

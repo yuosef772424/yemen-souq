@@ -21,8 +21,7 @@ class SearchController
         private readonly ExchangeRateService $rates,
         private readonly ArabicNormalizer $normalizer,
         private readonly EventRecorder $events,
-    ) {
-    }
+    ) {}
 
     public function __invoke(Request $request): View
     {

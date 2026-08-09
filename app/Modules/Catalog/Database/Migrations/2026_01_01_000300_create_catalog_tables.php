@@ -89,7 +89,7 @@ return new class extends Migration
             $table->index(['attribute_id', 'value_number']);
             $table->index(['attribute_id', 'option_id']);
         });
-        
+
         Schema::create('listing_price_history', function (Blueprint $table) {
             $table->id();
             $table->foreignId('listing_id')->constrained('listings')->cascadeOnDelete();
@@ -103,21 +103,21 @@ return new class extends Migration
             $table->index(['listing_id', 'changed_at']);
         });
         Schema::create('listing_multi_options', function (Blueprint $table) {
-    $table->foreignId('listing_id')->constrained('listings')->cascadeOnDelete();
-    $table->foreignId('attribute_id')->constrained('attributes')->cascadeOnDelete();
-    $table->foreignId('option_id')->constrained('attribute_options')->cascadeOnDelete();
+            $table->foreignId('listing_id')->constrained('listings')->cascadeOnDelete();
+            $table->foreignId('attribute_id')->constrained('attributes')->cascadeOnDelete();
+            $table->foreignId('option_id')->constrained('attribute_options')->cascadeOnDelete();
 
-    $table->primary(['listing_id', 'attribute_id', 'option_id']);
-    $table->index(['attribute_id', 'option_id'], 'idx_lmo_filter');
-});
+            $table->primary(['listing_id', 'attribute_id', 'option_id']);
+            $table->index(['attribute_id', 'option_id'], 'idx_lmo_filter');
+        });
     }
 
     public function down(): void
-{
-    Schema::dropIfExists('listing_price_history');
-    Schema::dropIfExists('listing_multi_options');
-    Schema::dropIfExists('listing_attribute_values');
-    Schema::dropIfExists('listing_images');
-    Schema::dropIfExists('listings');
-}
+    {
+        Schema::dropIfExists('listing_price_history');
+        Schema::dropIfExists('listing_multi_options');
+        Schema::dropIfExists('listing_attribute_values');
+        Schema::dropIfExists('listing_images');
+        Schema::dropIfExists('listings');
+    }
 };

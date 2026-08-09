@@ -15,9 +15,7 @@ enum EventName: string
     case SearchImpression = 'search_impression';
     case SearchResultClicked = 'search_result_clicked';
     case FilterApplied = 'filter_applied';
-    case FilterRemoved = 'filter_removed';
     case ListingViewed = 'listing_viewed';
     case ContactRevealed = 'contact_revealed';
     case ListingCreated = 'listing_created';
-    case FormAbandoned = 'form_abandoned';
 }

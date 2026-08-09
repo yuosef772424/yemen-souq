@@ -15,8 +15,7 @@ class ListingController
     public function __construct(
         private readonly ExchangeRateService $rates,
         private readonly EventRecorder $events,
-    ) {
-    }
+    ) {}
 
     public function show(Request $request, Listing $listing): View
     {

@@ -31,10 +31,15 @@ use Throwable;
 final class ListingImageService
 {
     public const MAX_PER_LISTING = 8;
+
     private const MAX_WIDTH = 1600;
+
     private const THUMB_WIDTH = 400;
+
     private const QUALITY = 82;
+
     private const THUMB_QUALITY = 70;
+
     private const DISK = 'public';
 
     /**
@@ -52,6 +57,7 @@ final class ListingImageService
         foreach (array_slice(array_values($uploads), 0, $room) as $upload) {
             if (! $upload instanceof UploadedFile || ! $upload->isValid()) {
                 $failed[] = 'ملف غير صالح تم تجاهله.';
+
                 continue;
             }
 
@@ -71,7 +77,7 @@ final class ListingImageService
         }
 
         if (count($uploads) > $room) {
-            $failed[] = 'تم قبول ' . self::MAX_PER_LISTING . ' صور كحد أقصى للإعلان.';
+            $failed[] = 'تم قبول '.self::MAX_PER_LISTING.' صور كحد أقصى للإعلان.';
         }
 
         $this->ensureSinglePrimary($listing);

@@ -135,7 +135,7 @@
             <p class="mt-0.5 text-xs text-muted">عضو منذ {{ $listing->user?->created_at?->translatedFormat('F Y') }}</p>
 
             @if ($listing->contact_phone && ! $listing->hide_phone)
-                <div x-data="contactReveal({{ $listing->id }})" class="mt-4">
+                <div x-data="contactReveal('{{ $listing->slug }}')" class="mt-4">
                     <button type="button" x-show="!phone" :disabled="loading" @click="reveal()"
                             class="w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60">
                         <span x-text="loading ? 'جارٍ الجلب…' : 'إظهار رقم التواصل'"></span>

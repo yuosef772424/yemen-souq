@@ -6,6 +6,7 @@ use App\Modules\Shared\Services\ArabicNormalizer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Category extends Model
@@ -39,7 +40,7 @@ class Category extends Model
 
         static::saved(function (self $category): void {
             $parent = $category->parent_id ? static::find($category->parent_id) : null;
-            $path = $parent ? $parent->path . '/' . $category->id : (string) $category->id;
+            $path = $parent ? $parent->path.'/'.$category->id : (string) $category->id;
 
             if ($category->path !== $path) {
                 static::withoutEvents(fn () => $category->newQuery()
@@ -60,7 +61,7 @@ class Category extends Model
         return $this->hasMany(self::class, 'parent_id')->orderBy('sort_order');
     }
 
-    public function attributes(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    public function attributes(): BelongsToMany
     {
         return $this->belongsToMany(Attribute::class, 'category_attributes')
             ->withPivot(['is_required', 'is_filterable', 'sort_order'])
@@ -81,7 +82,7 @@ class Category extends Model
     public function scopeInSubtree(Builder $query, string $path): Builder
     {
         return $query->where(function (Builder $q) use ($path): void {
-            $q->where('path', $path)->orWhere('path', 'like', $path . '/%');
+            $q->where('path', $path)->orWhere('path', 'like', $path.'/%');
         });
     }
 

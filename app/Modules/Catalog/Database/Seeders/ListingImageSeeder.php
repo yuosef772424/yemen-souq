@@ -61,13 +61,13 @@ class ListingImageSeeder extends Seeder
         $label = htmlspecialchars(mb_substr($title, 0, 26), ENT_QUOTES, 'UTF-8');
 
         return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">'
-            . '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
-            . '<stop offset="0" stop-color="' . $from . '"/>'
-            . '<stop offset="1" stop-color="' . $to . '"/>'
-            . '</linearGradient></defs>'
-            . '<rect width="800" height="600" fill="url(#g)"/>'
-            . '<text x="400" y="312" text-anchor="middle" fill="#ffffff" fill-opacity="0.9" '
-            . 'font-family="sans-serif" font-size="32" direction="rtl">' . $label . '</text>'
-            . '</svg>';
+            .'<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+            .'<stop offset="0" stop-color="'.$from.'"/>'
+            .'<stop offset="1" stop-color="'.$to.'"/>'
+            .'</linearGradient></defs>'
+            .'<rect width="800" height="600" fill="url(#g)"/>'
+            .'<text x="400" y="312" text-anchor="middle" fill="#ffffff" fill-opacity="0.9" '
+            .'font-family="sans-serif" font-size="32" direction="rtl">'.$label.'</text>'
+            .'</svg>';
     }
 }

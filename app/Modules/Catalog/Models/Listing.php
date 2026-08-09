@@ -2,10 +2,11 @@
 
 namespace App\Modules\Catalog\Models;
 
+use App\Models\User;
+use App\Modules\Catalog\Database\Factories\ListingFactory;
 use App\Modules\Shared\Models\Category;
 use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Models\Location;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -29,14 +30,14 @@ class Listing extends Model
     ];
 
     /**
-     * أعمدة محسوبة — يملؤها ListingObserver ولا تُمرَّر من الخارج أبداً.
-     * إبقاؤها خارج fillable يمنع التلاعب بها عبر طلب HTTP.
+     * الأعمدة المحسوبة — title_normalized و description_normalized
+     * و price_in_base و rate_used و rate_date — مستثناة من $fillable
+     * عن قصد. يملؤها ListingObserver وحده، فلا يستطيع طلب HTTP
+     * تمرير قيمة مزيّفة لها.
+     *
+     * لا نستخدم $guarded: لارافيل يتجاهله تماماً حين يكون $fillable
+     * غير فارغ، فوجوده معاً يوحي بحماية مزدوجة غير قائمة.
      */
-    protected $guarded = [
-        'title_normalized', 'description_normalized',
-        'price_in_base', 'rate_used', 'rate_date',
-    ];
-
     protected function casts(): array
     {
         return [
@@ -146,8 +147,9 @@ class Listing extends Model
     {
         return 'slug';
     }
-    protected static function newFactory(): \App\Modules\Catalog\Database\Factories\ListingFactory
-{
-    return \App\Modules\Catalog\Database\Factories\ListingFactory::new();
-}
+
+    protected static function newFactory(): ListingFactory
+    {
+        return ListingFactory::new();
+    }
 }

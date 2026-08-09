@@ -2,6 +2,7 @@
 
 namespace App\Modules\Catalog\Http\Controllers;
 
+use App\Modules\Analytics\Events\EventName;
 use App\Modules\Catalog\Http\Requests\StoreListingRequest;
 use App\Modules\Catalog\Models\Listing;
 use App\Modules\Catalog\Services\ListingImageService;
@@ -13,12 +14,13 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
+use App\Modules\Analytics\Services\EventRecorder;
 class ListingCreateController
 {
     public function __construct(
         private readonly ListingImageService $images,
-    ) {
-    }
+         private readonly EventRecorder $events,
+    ) {}
 
     public function create(): View
     {
@@ -46,6 +48,14 @@ class ListingCreateController
         });
 
         $result = $this->images->attach($listing, $request->file('images', []));
+
+        // بلا هذا الحدث يبقى listings_created صفراً دائماً
+        // في funnel_daily، فيبدو مسار التحويل ناقصاً
+        $this->events->record(EventName::ListingCreated, 'listing', $listing->id, [
+            'category_id' => $listing->category_id,
+            'currency' => $listing->currency_code,
+            'images' => $result['stored'],
+        ]);
 
         return redirect()
             ->route('listing.show', $listing)

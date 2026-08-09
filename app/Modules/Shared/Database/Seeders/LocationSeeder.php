@@ -50,7 +50,7 @@ class LocationSeeder extends Seeder
 
         foreach (self::GOVERNORATES as $governorateName => $districts) {
             $governorate = Location::updateOrCreate(
-                ['slug' => Str::slug($this->transliterate($governorateName)) . '-gov'],
+                ['slug' => Str::slug($this->transliterate($governorateName)).'-gov'],
                 [
                     'name_ar' => $governorateName,
                     'parent_id' => $country->id,
@@ -64,7 +64,7 @@ class LocationSeeder extends Seeder
 
             foreach ($districts as $districtName) {
                 Location::updateOrCreate(
-                    ['slug' => $governorate->slug . '-' . $districtOrder],
+                    ['slug' => $governorate->slug.'-'.$districtOrder],
                     [
                         'name_ar' => $districtName,
                         'parent_id' => $governorate->id,

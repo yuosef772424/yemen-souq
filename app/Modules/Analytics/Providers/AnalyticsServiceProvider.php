@@ -2,6 +2,8 @@
 
 namespace App\Modules\Analytics\Providers;
 
+use App\Modules\Analytics\Console\PruneEventsCommand;
+use App\Modules\Analytics\Console\RollupCommand;
 use App\Modules\Analytics\Services\EventRecorder;
 use Illuminate\Support\ServiceProvider;
 
@@ -23,10 +25,10 @@ class AnalyticsServiceProvider extends ServiceProvider
             }
         });
         if ($this->app->runningInConsole()) {
-    $this->commands([
-        \App\Modules\Analytics\Console\RollupCommand::class,
-        \App\Modules\Analytics\Console\PruneEventsCommand::class,
-    ]);
-}
+            $this->commands([
+                RollupCommand::class,
+                PruneEventsCommand::class,
+            ]);
+        }
     }
 }

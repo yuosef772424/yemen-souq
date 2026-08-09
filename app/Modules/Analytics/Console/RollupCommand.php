@@ -64,24 +64,16 @@ class RollupCommand extends Command
             ->whereNotNull('entity_id')
             ->groupBy('entity_id')
             ->get();
-
-        $existing = DB::table('listings')->pluck('id')->all();
-        $valid = array_flip($existing);
-
         foreach ($rows->chunk(200) as $chunk) {
             $payload = [];
 
             foreach ($chunk as $row) {
-                // الإعلان قد يكون حُذف بعد تسجيل الحدث
-                if (! isset($valid[$row->listing_id])) {
-                    continue;
-                }
-
                 $payload[] = [
                     'listing_id' => $row->listing_id,
                     'stat_date' => $date,
                     'views' => (int) $row->views,
                     'unique_viewers' => (int) $row->unique_viewers,
+                    // المفضلة غير مبنية بعد — صفر مقصود لا خطأ حساب
                     'favorites' => 0,
                     'contacts' => (int) $row->contacts,
                     'search_impressions' => (int) $row->search_impressions,
@@ -177,18 +169,9 @@ class RollupCommand extends Command
             ->whereDate('occurred_at', $date)
             ->groupBy('filter_key')
             ->get();
-
-        // الإلغاء السريع: أقوى إشارة على أن الفلتر أعطى نتيجة غير متوقعة
-        $removedFast = DB::table('user_events')
-            ->selectRaw("
-                JSON_UNQUOTE(JSON_EXTRACT(payload, '$.key')) as filter_key,
-                COUNT(*) as n
-            ")
-            ->where('event_name', 'filter_removed')
-            ->whereDate('occurred_at', $date)
-            ->whereRaw("JSON_EXTRACT(payload, '$.seconds_active') <= 10")
-            ->groupBy('filter_key')
-            ->pluck('n', 'filter_key');
+        // الإلغاء السريع للفلتر غير مُتتبَّع بعد: يحتاج قياساً في المتصفح
+        // (وقت التطبيق ثم حدث عند الإلغاء). العمود يبقى صفراً حتى ذلك الحين.
+        $removedFast = collect();
 
         $payload = [];
 
@@ -249,7 +232,8 @@ class RollupCommand extends Command
             'listing_views' => (int) $counts->listing_views,
             'contacts_revealed' => (int) $counts->contacts_revealed,
             'listings_created' => (int) $counts->listings_created,
-            'forms_abandoned' => (int) $counts->forms_abandoned,
+            // النماذج المهجورة غير مُتتبَّعة بعد
+            'forms_abandoned' => 0,
         ]], ['stat_date'], [
             'searches', 'searches_with_click', 'listing_views',
             'contacts_revealed', 'listings_created', 'forms_abandoned',

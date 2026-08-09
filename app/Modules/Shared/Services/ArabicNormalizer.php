@@ -35,7 +35,7 @@ final class ArabicNormalizer
         'ة' => 'ه',
         'ى' => 'ي', 'ئ' => 'ي',
         'ؤ' => 'و',
-       
+
     ];
 
     /** الأرقام العربية والفارسية إلى لاتينية */
@@ -45,6 +45,7 @@ final class ArabicNormalizer
         '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
         '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
     ];
+
     /** علامات الترقيم العربية — يصنّفها PCRE ضمن \p{Arabic} فتنجو من التنظيف العام */
     private const ARABIC_PUNCTUATION = [
         '،', '؛', '؟', '٪', '٫', '٬', '٭', '۔', '؞', '؟',
@@ -63,7 +64,6 @@ final class ArabicNormalizer
         $text = str_replace(self::DIACRITICS, '', $text);
         $text = strtr($text, self::LETTER_MAP);
         $text = strtr($text, self::DIGIT_MAP);
-
 
         // علامات الترقيم العربية تحديداً — لا يلتقطها التعبير النمطي أدناه
         $text = str_replace(self::ARABIC_PUNCTUATION, ' ', $text);

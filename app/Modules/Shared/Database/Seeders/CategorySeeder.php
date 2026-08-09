@@ -94,7 +94,7 @@ class CategorySeeder extends Seeder
 
             foreach ($children as $childName) {
                 $child = Category::updateOrCreate(
-                    ['slug' => $slug . '-' . $childOrder],
+                    ['slug' => $slug.'-'.$childOrder],
                     [
                         'name_ar' => $childName,
                         'parent_id' => $parent->id,

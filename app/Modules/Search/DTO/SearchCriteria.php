@@ -27,8 +27,7 @@ final readonly class SearchCriteria
         public bool $withImageOnly = false,
         public string $sort = 'newest',
         public int $perPage = 24,
-    ) {
-    }
+    ) {}
 
     public static function fromRequest(Request $request): self
     {

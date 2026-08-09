@@ -14,7 +14,7 @@ class ArabicNormalizerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->normalizer = new ArabicNormalizer();
+        $this->normalizer = new ArabicNormalizer;
     }
 
     #[Test]
@@ -28,8 +28,8 @@ class ArabicNormalizerTest extends TestCase
     {
         return [
             'ألف عادية' => ['اعلانات'],
-            'همزة فوق'  => ['أعلانات'],
-            'همزة تحت'  => ['إعلانات'],
+            'همزة فوق' => ['أعلانات'],
+            'همزة تحت' => ['إعلانات'],
             'ألف ممدودة' => ['آعلانات'],
         ];
     }
@@ -67,7 +67,7 @@ class ArabicNormalizerTest extends TestCase
     #[Test]
     public function it_converts_arabic_digits_to_latin(): void
     {
-       $this->assertSame('سياره موديل 2020', $this->normalizer->normalize('سياره موديل ٢٠٢٠'));
+        $this->assertSame('سياره موديل 2020', $this->normalizer->normalize('سياره موديل ٢٠٢٠'));
     }
 
     #[Test]
@@ -79,7 +79,7 @@ class ArabicNormalizerTest extends TestCase
     #[Test]
     public function it_replaces_punctuation_with_space(): void
     {
-      $this->assertSame('سياره تويوتا 2015', $this->normalizer->normalize('سيارة، تويوتا - 2015!'));
+        $this->assertSame('سياره تويوتا 2015', $this->normalizer->normalize('سيارة، تويوتا - 2015!'));
     }
 
     #[Test]
@@ -100,10 +100,10 @@ class ArabicNormalizerTest extends TestCase
     {
         $tokens = $this->normalizer->tokenize('شقة و صنعاء للايجار');
 
-    $this->assertContains('شقه', $tokens);
-    $this->assertContains('صنعاء', $tokens);
-    $this->assertNotContains('و', $tokens, 'الحروف المفردة تُستبعد');
-}
+        $this->assertContains('شقه', $tokens);
+        $this->assertContains('صنعاء', $tokens);
+        $this->assertNotContains('و', $tokens, 'الحروف المفردة تُستبعد');
+    }
 
     #[Test]
     public function it_removes_duplicate_tokens(): void

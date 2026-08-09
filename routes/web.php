@@ -1,9 +1,9 @@
 <?php
 
-use App\Modules\Catalog\Http\Controllers\ListingController;
-use App\Modules\Search\Http\Controllers\SearchController;
-use App\Modules\Catalog\Http\Controllers\ListingCreateController;
 use App\Modules\Catalog\Http\Controllers\ContactRevealController;
+use App\Modules\Catalog\Http\Controllers\ListingController;
+use App\Modules\Catalog\Http\Controllers\ListingCreateController;
+use App\Modules\Search\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {

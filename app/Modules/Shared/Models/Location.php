@@ -39,7 +39,7 @@ class Location extends Model
 
         static::saved(function (self $location): void {
             $parent = $location->parent_id ? static::find($location->parent_id) : null;
-            $path = $parent ? $parent->path . '/' . $location->id : (string) $location->id;
+            $path = $parent ? $parent->path.'/'.$location->id : (string) $location->id;
 
             if ($location->path !== $path) {
                 static::withoutEvents(fn () => $location->newQuery()
@@ -73,7 +73,7 @@ class Location extends Model
     public function scopeInSubtree(Builder $query, string $path): Builder
     {
         return $query->where(function (Builder $q) use ($path): void {
-            $q->where('path', $path)->orWhere('path', 'like', $path . '/%');
+            $q->where('path', $path)->orWhere('path', 'like', $path.'/%');
         });
     }
 

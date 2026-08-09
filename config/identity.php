@@ -1,14 +1,42 @@
 <?php
 
 return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | توثيق الهاتف
+    |--------------------------------------------------------------------------
+    |
+    | display — يُعرَض الرمز على الشاشة، ولا يُرسَل. للتطوير والعرض التجريبي.
+    |           يرمي استثناءً إن كانت البيئة إنتاجاً، فلا يمكن أن ينجو خطأً.
+    | sms     — مزوّد حقيقي. غير مُنفَّذ بعد؛ الواجهة جاهزة له.
+    |
+    | الرمز مولَّد عشوائياً دائماً — لا رمز ثابت في أي بيئة. الرمز الثابت
+    | يتخطّى التجزئة والصلاحية وعدّ المحاولات، فيبقى المسار الحقيقي
+    | غير مُجرَّب إلى يوم النشر.
+    |
+    */
+
     'phone_verification' => [
         'driver' => env('PHONE_VERIFICATION_DRIVER', 'display'),
-        'code_length' => env('PHONE_VERIFICATION_CODE_LENGTH', 6),
-        'ttl_minutes' => env('PHONE_VERIFICATION_TTL_MINUTES', 10),
-        'max_attempts' => env('PHONE_VERIFICATION_MAX_ATTEMPTS', 5),
-        'max_sends_per_window' => env('PHONE_VERIFICATION_MAX_SENDS', 3),
-        'send_window_minutes' => env('PHONE_VERIFICATION_SEND_WINDOW', 5),
+        'code_length' => 6,
+        'ttl_minutes' => 10,
+        'max_attempts' => 5,
+        'max_sends_per_window' => 3,
+        'send_window_minutes' => 10,
     ],
 
-    'require_phone_verification_to_publish' => env('REQUIRE_PHONE_VERIFICATION', true),
+    /*
+    |--------------------------------------------------------------------------
+    | بوابات النشر
+    |--------------------------------------------------------------------------
+    |
+    | اشتراط توثيق الهاتف للنشر هو السلوك الصحيح في منصة حقيقية: رقم
+    | غير موثَّق يعني إعلاناً لا يمكن التواصل بشأنه. لكنه يضيف خطوتين
+    | على من يجرّب العرض، فأُتيح تعطيله من هنا بلا تعديل كود.
+    |
+    */
+
+    'require_phone_verification_to_publish' => (bool) env('REQUIRE_PHONE_VERIFICATION', true),
+
 ];

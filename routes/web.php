@@ -18,7 +18,7 @@ Route::get('/', SearchController::class)->name('search');
 Route::get('/listing/{listing}', [ListingController::class, 'show'])->name('listing.show');
 
 Route::post('/listing/{listing}/contact', ContactRevealController::class)->name('listing.contact');
-
+Route::post('/add', [ListingController::class, 'store'])->name('listing.store');
 /*
 |--------------------------------------------------------------------------
 | النشر — يتطلب حساباً ورقماً موثَّقاً
@@ -35,10 +35,10 @@ Route::post('/listing/{listing}/contact', ContactRevealController::class)->name(
 |
 */
 
-Route::middleware(['auth', EnsurePhoneIsVerified::class])->group(function (): void {
+// Route::middleware(['auth', EnsurePhoneIsVerified::class])->group(function (): void {
     Route::get('/add', [ListingCreateController::class, 'create'])->name('listing.create');
     Route::post('/add', [ListingCreateController::class, 'store'])->name('listing.store');
-});
+// });
 
 /*
 |--------------------------------------------------------------------------

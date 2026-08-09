@@ -1,20 +1,46 @@
 <?php
 
 use App\Modules\Catalog\Http\Controllers\ContactRevealController;
-use App\Modules\Catalog\Http\Controllers\ListingController;
 use App\Modules\Catalog\Http\Controllers\ListingCreateController;
+use App\Modules\Catalog\Http\Controllers\ListingController;
 use App\Modules\Search\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+/*
+|--------------------------------------------------------------------------
+| المسارات العامة
+|--------------------------------------------------------------------------
+|
+| ترتيب المسارات مقصود: /listing/create قبل /listing/{listing}، وإلا
+| التقط الثاني كلمة "create" كـslug وأعاد 404 على صفحة النشر.
+|
+*/
 
 Route::get('/', SearchController::class)->name('search');
 
+Route::get('/listing/create', [ListingCreateController::class, 'create'])->name('listing.create');
+Route::post('/listing', [ListingCreateController::class, 'store'])->name('listing.store');
+
 Route::get('/listing/{listing}', [ListingController::class, 'show'])->name('listing.show');
 
-Route::get('/add', [ListingCreateController::class, 'create'])->name('listing.create');
-Route::post('/add', [ListingCreateController::class, 'store'])->name('listing.store');
+/*
+| كشف رقم التواصل.
+|
+| match(['get','post']) مؤقتة: لم أرَ resources/js/app.js فلا أعرف أي
+| فعل تستخدمه دالة contactReveal. ضيّقها بعد التحقق — والأصح POST مع
+| رمز CSRF، لأن الكشف حدث يُسجَّل لا قراءة محضة.
+*/
+Route::match(['get', 'post'], '/listing/{listing}/contact', ContactRevealController::class)
+    ->name('listing.contact');
 
-Route::post('/listing/{listing}/contact', ContactRevealController::class)->name('listing.contact');
+/*
+|--------------------------------------------------------------------------
+| المصادقة
+|--------------------------------------------------------------------------
+|
+| يُفتَح في السكربت التالي، بعد وجود المتحكمات. مسار يشير إلى متحكم
+| غير موجود يُسقط كل صفحة في الموقع بـTarget class does not exist.
+|
+*/
+
+// require base_path('app/Modules/Identity/Routes/web.php');

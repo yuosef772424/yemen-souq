@@ -1,59 +1,241 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# سوق يمني — بحث واعٍ بالعملات
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+> منصة إعلانات مبوّبة تجريبية، بُنيت لاختبار مقاربة محددة: **كيف يعمل البحث بالسعر في سوق تتداول فيه ثلاث عملات؟**
 
-## About Laravel
+مشروع مستقل، ليس نسخة من أي منصة قائمة.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+**Yemeni classifieds platform with currency-aware search.** Laravel 12, modular monolith. The core problem: in markets trading in multiple currencies, filtering by price on the raw number produces misleading results. This project normalizes value at write time and filters on the unified column.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+---
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## المشكلة
 
-## Learning Laravel
+في السوق اليمني تتداول ثلاث عملات: الريال اليمني، الريال السعودي، والدولار الأمريكي. ومنصات الإعلانات تسمح للمعلن باختيار عملته، لكن **فلتر السعر يتعامل مع الرقم مجرداً من عملته**.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+النتيجة: مستخدم يبحث عن منتج بين 100 و200 يحصل على:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+| الإعلان | الرقم | القيمة الفعلية |
+|---|---|---|
+| لعبة أطفال | 100 ر.ي | 100 ر.ي |
+| ساعة يد | 100 ر.س | 14,000 ر.ي |
+| سماعات | 100 $ | 53,000 ر.ي |
 
-## Laravel Sponsors
+ثلاثة إعلانات بنفس الرقم، وقيمتها الحقيقية تتباعد بمقدار 530 ضعفاً. نتائج البحث تصبح مضلّلة، وثقة المستخدم بدقة المنصة تنهار.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+**لا يحل هذه المشكلة أي محرك بحث جاهز** — لا Algolia ولا Meilisearch ولا Typesense. كلها تعامل السعر كرقم.
 
-### Premium Partners
+---
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+## الحل المُنفَّذ
 
-## Contributing
+السعر يُخزَّن مرتين: بعملته الأصلية كما أدخلها المعلن، وبقيمة موحّدة محسوبة.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```
+price_amount     45000        ← يُعرض كما هو، لا يُمَس
+currency_code    SAR
+price_in_base    6300000      ← يُستخدم للفلترة والترتيب فقط
+rate_used        140.000000   ← سعر الصرف وقت الحساب، للتدقيق
+rate_date        2026-08-09
+```
 
-## Code of Conduct
+وعند الفلترة، **حدود النطاق** تُحوَّل مرة واحدة إلى عملة الأساس وتُقارن بالعمود المفهرس — لا تُحوَّل أسعار الإعلانات واحداً واحداً. عملية واحدة بدل آلاف، والفهرس يبقى مستخدَماً.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### ثلاث نتائج مباشرة
 
-## Security Vulnerabilities
+**فلترة صحيحة** — «من 90 إلى 110 دولاراً» تُرجع الإعلانات المتكافئة القيمة بكل العملات، لا التي تحمل نفس الرقم.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+**ترتيب صحيح** — الترتيب بالسعر يجري على القيمة الموحّدة، فلا يظهر إعلان بـ100 ريال يمني قبل إعلان بـ90 دولاراً.
 
-## License
+**عرض صريح** — كل بطاقة تُظهر السعر الأصلي بارزاً والقيمة الموحّدة تحته، وصفحة التفاصيل تعرض المقابل بكل العملات.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### سعر الصرف تاريخي لا مطلق
+
+`exchange_rates` يحمل `effective_date`، وجلب السعر يُرجع **آخر سعر مسجّل في تاريخ معيّن أو قبله** — لا أحدث سعر في الجدول. إعلان نُشر قبل شهر يحتفظ بتحويله الصحيح وقتها.
+
+في سوق بعملة متقلبة كاليمن، الفرق بين المنطقين جوهري.
+
+---
+
+## الميزة الثانية: البحث العربي المطبّع
+
+المستخدم يكتب «اعلانات» أو «إعلانات» أو «أعلانات» ويتوقع نفس النتائج. المطابقة الحرفية تفشل في الثلاثة.
+
+`ArabicNormalizer` يوحّد قبل المطابقة:
+
+| المُدخل | المطبّع |
+|---|---|
+| إعلانات / أعلانات / آعلانات | اعلانات |
+| سيارة | سياره |
+| مستوى | مستوي |
+| كِتَابٌ | كتاب |
+| جـــميـل | جميل |
+| موديل ٢٠٢٠ | موديل 2020 |
+
+النص الأصلي يُعرض كما كتبه صاحبه دائماً؛ المطبّع للبحث فقط. آخر سطر في الجدول مهم عملياً: معلن يكتب السنة بالأرقام العربية وباحث يكتبها باللاتينية لا يتقابلان أبداً بدون هذا التحويل.
+
+---
+
+## الميزة الثالثة: كشف عيوب البحث من بيانات الاستخدام
+
+المنصة تسجّل سلوك البحث وتُجمّعه دورياً، فتظهر أنواع من العيوب لا يكشفها أي اختبار:
+
+**استعلامات بصفر نتائج** — كل صف هنا إما منتج ناقص أو عيب في المطابقة.
+
+**استعلامات بنتائج لكن بلا نقر** — البحث يجد شيئاً، لكنه ليس المطلوب. مشكلة ترتيب لا مطابقة.
+
+**فلاتر تُطبَّق ثم تُلغى فوراً** — إشارة قوية أن الفلتر أعطى نتيجة غير متوقعة. وهذا بالضبط ما يحدث في مشكلة العملات.
+
+**نسبة النقر إلى الظهور لكل إعلان** — أساس ترتيب مستقبلي يتعلم من التفاعل.
+
+هذا يقلب علاقة المنصة بجودة بحثها: من انتظار شكوى مستخدم، إلى قياس مستمر.
+
+---
+
+## المعمارية
+
+**Modular Monolith**: كل وحدة تملك جداولها ملكيةً حصرية، واتجاه الاعتماد لا يعود للخلف.
+
+```
+app/Modules/
+├── Shared/          العملات، أسعار الصرف، المواقع، التصنيفات، الصفات، تطبيع النص
+├── Identity/        الحسابات وبيانات العرض والتحقق من الهاتف
+├── Catalog/         الإعلانات، الصور، سجل تغيّر الأسعار
+├── Engagement/      المزادات، المزايدات، المفضلة، المحادثات، التقييمات
+├── Search/          فهرس مشتق، معايير البحث، بناء الاستعلام
+├── Analytics/        تسجيل الأحداث، التجميع الدوري، التنظيف
+└── Notifications/    الإشعارات وتفضيلات القنوات
+```
+
+الاعتماد: `Notifications`/`Search`/`Analytics` ← `Engagement` ← `Catalog` ← `Identity`/`Shared`
+
+كل وحدة تُسجَّل هجراتها وقوالبها تلقائياً عبر `ModuleServiceProvider` — إضافة وحدة جديدة لا تحتاج تعديل أي ملف.
+
+### قرارات تستحق الذكر
+
+**الأعمدة المحسوبة تُملأ في `Observer` لا في `Controller`.** `price_in_base` هو ما تعتمد عليه الفلترة كلها؛ لو نُسي حسابه في مسار واحد (استيراد، أمر artisan، لوحة إدارة) فذلك الإعلان **يختفي من النتائج بصمت** — بلا خطأ ولا تحذير. الـObserver يغلق كل المسارات.
+
+**وحدة البحث لا تملك بيانات أصلية.** `search_index` جدول مشتق بالكامل، يُعاد بناؤه من `listings`. مهمته أن يحمل كل ما يحتاجه البحث في جدول مسطّح واحد بلا `JOIN`.
+
+**السجل الخام رخيص الكتابة، والتحليل على جداول مجمّعة.** الأحداث تُجمَّع في الذاكرة أثناء الطلب وتُكتب دفعة واحدة عبر طابور **بعد** إرسال الاستجابة. صفحة بحث بـ24 نتيجة تُنتج 26 حدثاً في استعلام `insert` واحد، بلا أي تأخير على المستخدم.
+
+**المال بـ`decimal` لا `float`.** `float` يفقد قروشاً في الحسابات المتراكمة. غير قابل للتفاوض في منصة بيع.
+
+---
+
+## الخصوصية
+
+المشروع يجمع بيانات سلوك، فالحدود مرسومة صراحةً:
+
+- **لا عنوان IP** — لا كاملاً ولا مقطوعاً. لا حاجة له في أي حساب.
+- **معرّف مجهول** في كوكي، مستقل عن الحساب، لا يحمل أي بيانات.
+- **نص البحث يُخزَّن مطبّعاً فقط** — لا النص الأصلي بأخطائه.
+- **لا بيانات شخصية في `payload`** — لا هواتف، لا أسماء، لا نص رسائل.
+- **مدة احتفاظ 90 يوماً** للسجل الخام؛ المجمّعات تكفي لكل التحليلات وتبقى.
+- **بيانات EXIF تُزال من الصور** عند التحويل إلى WebP — ومنها إحداثيات GPS. صور الهواتف تحمل موقع التصوير، ونشرها مع إعلان بيت أو سيارة تسريب حقيقي. الملف الأصلي لا يُحفظ إطلاقاً.
+- **رقم التواصل لا يُرسَل في HTML** — يُجلب عند الطلب. يقلّل حصاد الأرقام آلياً.
+- **انسحاب من التتبع** عبر `user_tracking_preferences`.
+
+---
+
+## التشغيل محلياً
+
+المتطلبات: PHP 8.2+ · MySQL 8 · Node 20+ · Composer
+
+```bash
+git clone <repo> && cd yemen-souq
+composer install
+npm install
+
+cp .env.example .env
+php artisan key:generate
+# اضبط DB_* في .env، وتأكد أن قاعدة البيانات بترميز utf8mb4
+
+php artisan migrate --seed        # 22 محافظة، 37 تصنيفاً، 156 إعلاناً بثلاث عملات
+php artisan storage:link
+php artisan db:seed --class="App\Modules\Catalog\Database\Seeders\ListingImageSeeder"
+```
+
+ثلاث نوافذ:
+
+```bash
+npm run dev
+php artisan serve
+php artisan queue:work        # ضرورية لتسجيل الأحداث
+```
+
+### تجربة الميزة الأساسية
+
+على `http://localhost:8000`:
+
+1. اختر **الدولار** في فلتر السعر، وأدخل من `100` إلى `200`
+2. لاحظ سطر «يقابل 53,000 – 106,000 ر.ي» يظهر أثناء الكتابة
+3. اضغط «طبّق الفلاتر» — النتائج تشمل العملات الثلاث لأن قيمتها متكافئة
+4. جرّب نفس النطاق بالريال اليمني — نتائج مختلفة تماماً، وهذا هو الصواب
+
+البذور تُنشئ عمداً إعلانات بنفس الرقم في عملات مختلفة (`100 ر.ي` / `100 ر.س` / `100 $`) لتكون المشكلة والحل مرئيين.
+
+### التحليلات
+
+```bash
+php artisan analytics:rollup --date=$(date +%F)
+php artisan analytics:prune --days=90
+```
+
+---
+
+## الاختبارات
+
+```bash
+php artisan test
+```
+
+أكثر من 60 اختباراً تغطي: تطبيع النص العربي، تحويل العملات بأسعار تاريخية، حساب `price_in_base` تلقائياً، الفلترة والترتيب بالقيمة الموحّدة، ومعالجة رفع الصور بحالاتها الحدية.
+
+الاختبارات التي توثّق المشكلة نفسها:
+
+- `equal_numbers_in_different_currencies_are_not_equal_in_value`
+- `price_filtering_uses_base_value_not_the_raw_number`
+- `a_price_range_in_dollars_matches_listings_priced_in_other_currencies`
+- `the_same_number_in_a_different_currency_is_excluded`
+- `sorting_by_price_uses_the_converted_value`
+
+---
+
+## حدود معروفة
+
+**البحث النصي يستخدم `LIKE` لا `FULLTEXT`.** محلل MySQL الافتراضي يقسّم على المسافات فقط، فلا يفهم أن «بالسيارة» تحتوي «سيارة» — ويفوّت نتائج صحيحة كثيرة في العربية. `LIKE '%كلمة%'` لا يستخدم الفهرس ويبطؤ فوق ~50 ألف صف. الحل الصحيح على المدى الطويل هو Meilisearch أو Typesense مع Laravel Scout.
+
+**أسعار الصرف تجريبية.** القيم المزروعة تقريبية للتطوير، والريال اليمني متقلب وسعره يختلف بين صنعاء وعدن. المهم في المشروع هو **آلية** التحويل وتاريخيتها، لا دقة الرقم. `exchange_rates` مُصمَّم لاستقبال أسعار من مصدر حقيقي.
+
+**`search_index` مبني وغير مستخدَم بعد.** البحث يستعلم `listings` مباشرة. الجدول والفهارس جاهزة للانتقال حين يستدعي حجم البيانات ذلك.
+
+---
+
+## خارج النطاق حالياً
+
+بُنيت الجداول ولم يُبنَ المنطق، أو لم يُبنَ أصلاً — **بقرار مقصود**: عمق في محور واحد أفضل من سطح في كل المحاور.
+
+| الميزة | الحالة |
+|---|---|
+| المصادقة والتسجيل | غير مبنية — يُستخدم مستخدم تجريبي للنشر |
+| المزادات والمزايدات | الجداول جاهزة، لا منطق |
+| المفضلة، المحادثات، التقييمات، البلاغات | الجداول جاهزة، لا منطق |
+| ترتيب بالشعبية (CTR منعَّم) | مصمَّم، غير مُنفَّذ |
+| درجة ثقة البائع | العمود موجود، لا حساب |
+| لوحة إدارة | غير مبنية — Filament مرشّح |
+| الصفات لكل تصنيف في الواجهة | مربوطة في البيانات، لا تظهر في الفلاتر |
+| المدفوعات وترقية الإعلانات | غير مبنية |
+
+### قرارات دُرست ورُفضت
+
+**PageRank اجتماعي لترتيب المعلنين.** الفكرة أنيقة لكنها خاطئة هنا: PageRank يحتاج رسماً بيانياً من الروابط، ولا يوجد نظام متابعة في المنصة. وسمعة البائع في سوق إعلانات تُحسب بمعادلة مباشرة — معاملات مكتملة، متوسط تقييم، معدل استجابة، عمر الحساب، معدل بلاغات — وهي قابلة للشرح للبائع، بخلاف رقم PageRank. والشهرة المبنية على متابعين قابلة للتلاعب بحسابات وهمية.
+
+**جدول `click_log` منفصل للنقرات.** غير ضروري: `user_events` يستوعب النقرة كحدث. والأهم أن حساب نسبة النقر يحتاج **الظهور** أيضاً، والظهور والنقرة يجب أن يعيشا في نفس المكان لتُحسب النسبة بينهما.
+
+**نسبة النقر الخام كإشارة ترتيب.** إعلان ظهر مرتين ونُقر مرة = 50%، وإعلان ظهر 5000 مرة ونُقر 900 = 18%. الخام يرفع الأول فوق الثاني، وهو خطأ فادح. الحل المصمَّم هو تنعيم بايزي: `(clicks + α·mean_ctr) / (impressions + α)` مع `α ≈ 50`.
+
+---
+
+## الترخيص
+
+MIT

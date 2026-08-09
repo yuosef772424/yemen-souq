@@ -1,11 +1,37 @@
-@import 'tailwindcss';
-
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
-@source '../**/*.blade.php';
-@source '../**/*.js';
+@import "tailwindcss";
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    /* لوحة عملية لموقع إعلانات: نيلي داكن أساسي، أخضر للأفعال */
+    --color-ink: #16233f;
+    --color-canvas: #f4f6f9;
+    --color-tint: #eef1f6;
+    --color-line: #dfe4ec;
+    --color-muted: #6b7688;
+    --color-brand: #0e6e5e;
+    --color-brand-dark: #0a5347;
+
+    --font-sans: "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* أرقام الأسعار يجب أن تتراصف عمودياً بين البطاقات */
+.tabular-nums {
+    font-variant-numeric: tabular-nums;
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+/* ترقيم الصفحات الافتراضي في لارافل يفترض اتجاه LTR */
+nav[role="navigation"] svg {
+    transform: scaleX(-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
 }

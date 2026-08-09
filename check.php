@@ -1,19 +1,13 @@
 <?php
-
-use App\Modules\Catalog\Models\Listing;
-
-// الحالات المقصودة: نفس الرقم، عملات مختلفة
-dump(
-    Listing::whereIn('price_amount', [100, 50000])
-        ->orderBy('price_amount')
-        ->get(['title', 'price_amount', 'currency_code', 'price_in_base'])
-        ->map(fn ($l) => "{$l->price_amount} {$l->currency_code} = {$l->price_in_base} ر.ي")
-        ->all()
-);
+// check.php
+use Illuminate\Support\Facades\DB;
 
 dump([
-    'total' => Listing::count(),
-    'by_currency' => Listing::selectRaw('currency_code, count(*) as n')
-        ->groupBy('currency_code')->pluck('n', 'currency_code'),
-    'between_20k_60k_base' => Listing::priceBetween(20000, 60000)->count(),
+    'queries' => DB::table('search_query_stats')->where('stat_date', '2026-08-09')
+        ->get(['query_normalized', 'times_searched', 'avg_results', 'zero_result_count', 'click_count', 'avg_click_position']),
+    'filters' => DB::table('filter_usage_stats')->where('stat_date', '2026-08-09')->get(),
+    'funnel' => DB::table('funnel_daily')->where('stat_date', '2026-08-09')->get(),
+    'top' => DB::table('listing_daily_stats')->where('stat_date', '2026-08-09')
+        ->orderByDesc('search_impressions')->limit(5)
+        ->get(['listing_id', 'search_impressions', 'search_clicks', 'views']),
 ]);

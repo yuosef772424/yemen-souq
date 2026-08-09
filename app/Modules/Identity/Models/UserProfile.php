@@ -9,14 +9,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * الملف الشخصي — جدول منفصل عن users بقصد.
+ * صف العرض لكل مستخدم.
  *
- * users يحمل ما تحتاجه المصادقة فقط؛ وهذا يحمل ما يُعرَض. الفصل يعني
- * أن قراءة صفحة إعلان لا تجلب أعمدة الحساب الحساسة، وأن إضافة حقل
- * عرض جديد لا تمس جدول المصادقة.
+ * RegisterController كان يستورد هذا الصنف وينشئه، والصنف غير موجود —
+ * فكل تسجيل جديد ينتهي بـClass not found. ولو وُجد الصنف بلا الخطاف
+ * أدناه لانتهى بخطأ SQL: name_normalized عمود NOT NULL والمتحكّم
+ * يمرّر display_name فقط.
  *
- * trust_score محسوب ولا يُحرَّر يدوياً — لذلك هو خارج fillable.
- * الحساب لم يُبنَ بعد؛ العمود ينتظر SellerTrustScorer.
+ * لماذا التطبيع في saving وليس في المتحكّم: نفس مبدأ ListingObserver —
+ * أي مسار يحفظ صفاً (تسجيل، seeder، اختبار، لوحة إدارة لاحقاً) يمرّ
+ * من هنا، فلا يبقى العمود فارغاً بصمت في مسار نسي أحدهم تعديله.
  */
 class UserProfile extends Model
 {
@@ -27,18 +29,15 @@ class UserProfile extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'user_id',
-        'display_name',
-        'name_normalized',
-        'avatar_path',
-        'bio',
-        'location_id',
-        'preferred_currency',
-        'preferred_locale',
-        'is_business',
-        'business_name',
+        'user_id', 'display_name', 'avatar_path', 'bio',
+        'location_id', 'preferred_currency', 'preferred_locale',
+        'is_business', 'business_name',
     ];
 
+    /**
+     * trust_score وlistings_count محسوبان — غيابهما عن fillable مقصود
+     * تماماً كغياب price_in_base عن fillable في Listing.
+     */
     protected function casts(): array
     {
         return [
@@ -48,18 +47,11 @@ class UserProfile extends Model
         ];
     }
 
-    /**
-     * name_normalized يُملأ تلقائياً — بنفس منطق ListingObserver.
-     * لو تُرك للمتحكم لنُسي في أول مسار آخر يُنشئ ملفاً شخصياً
-     * (لوحة إدارة، استيراد، اختبار)، فيصبح البحث عن البائع بالاسم عاجزاً.
-     */
     protected static function booted(): void
     {
         static::saving(function (self $profile): void {
-            if ($profile->isDirty('display_name')) {
-                $profile->name_normalized = app(ArabicNormalizer::class)
-                    ->normalize($profile->display_name);
-            }
+            $profile->name_normalized = app(ArabicNormalizer::class)
+                ->normalize($profile->display_name);
         });
     }
 

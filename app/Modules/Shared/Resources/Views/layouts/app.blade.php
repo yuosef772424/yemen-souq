@@ -24,6 +24,11 @@
         <div class="flex-1"></div>
 
         @auth
+            <a href="{{ route('account.listings') }}"
+               class="rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-ink">
+                إعلاناتي
+            </a>
+
             <span class="hidden text-sm text-muted sm:block">{{ auth()->user()->displayName() }}</span>
 
             <form method="POST" action="{{ route('logout') }}">
@@ -51,6 +56,13 @@
             @foreach (session('warnings', []) as $warning)
                 <p class="mt-1 text-xs text-green-800">{{ $warning }}</p>
             @endforeach
+        </div>
+    @endif
+
+    {{-- محاولة مرفوضة ليست نجاحاً: التجديد قبل موعده يرجع هنا لا في الشريط الأخضر --}}
+    @if (session('error'))
+        <div role="alert" class="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {{ session('error') }}
         </div>
     @endif
 

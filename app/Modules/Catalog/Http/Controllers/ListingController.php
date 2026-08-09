@@ -19,20 +19,38 @@ class ListingController
 
     public function show(Request $request, Listing $listing): View
     {
-        abort_unless($listing->status === 'active', 404);
+        $isOwner = $request->user()?->id === $listing->user_id;
+
+        // المالك يرى إعلانه في كل حالة — وإلا فتعديل إعلان موقوف يقود
+        // إلى 404 عند «معاينة» ما عُدِّل، وهو طريق مسدود بلا سبب مفهوم
+        abort_unless($listing->status === 'active' || $isOwner, 404);
 
         $listing->load(['currency', 'category.parent', 'location.parent', 'images', 'user']);
 
-        // زيادة العدّاد بلا لمس updated_at — وإلا بدا كل إعلان مُعدَّلاً للتو
-        $listing->newQuery()->whereKey($listing->getKey())->increment('views_count');
+        /**
+         * زيارة المالك لإعلانه لا تُحسب.
+         *
+         * السبب عمليّ: المعلن يفتح إعلانه ليتأكد أنه ظهر، ثم يفتحه ليرى
+         * المشاهدات، ثم يحدّث الصفحة. كل ذلك يزيد العدّاد — فيصبح الرقم
+         * الذي جاء ليقرأه من صنعه هو. وأسوأ من رقم مفقود رقمٌ يبدو
+         * صحيحاً وليس كذلك.
+         *
+         * والحدث يُستثنى معه لا العدّاد وحده: لو استُثني العدّاد فقط،
+         * لاختلف رقم الصفحة عن رقم listing_daily_stats بلا تفسير.
+         */
+        if (! $isOwner) {
+            // زيادة العدّاد بلا لمس updated_at — وإلا بدا كل إعلان مُعدَّلاً للتو
+            $listing->newQuery()->whereKey($listing->getKey())->increment('views_count');
 
-        $this->recordVisit($request, $listing);
+            $this->recordVisit($request, $listing);
+        }
 
         return view('catalog::show', [
             'listing' => $listing,
             'baseCurrency' => Currency::base(),
             'equivalents' => $this->equivalents($listing),
             'similar' => $this->similar($listing),
+            'isOwner' => $isOwner,
         ]);
     }
 

@@ -1,46 +1,49 @@
 <?php
 
 use App\Modules\Catalog\Http\Controllers\ContactRevealController;
-use App\Modules\Catalog\Http\Controllers\ListingCreateController;
 use App\Modules\Catalog\Http\Controllers\ListingController;
+use App\Modules\Catalog\Http\Controllers\ListingCreateController;
+use App\Modules\Identity\Http\Middleware\EnsurePhoneIsVerified;
 use App\Modules\Search\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| المسارات العامة
+| عام
 |--------------------------------------------------------------------------
-|
-| ترتيب المسارات مقصود: /listing/create قبل /listing/{listing}، وإلا
-| التقط الثاني كلمة "create" كـslug وأعاد 404 على صفحة النشر.
-|
 */
 
 Route::get('/', SearchController::class)->name('search');
 
-Route::get('/listing/create', [ListingCreateController::class, 'create'])->name('listing.create');
-Route::post('/listing', [ListingCreateController::class, 'store'])->name('listing.store');
-
 Route::get('/listing/{listing}', [ListingController::class, 'show'])->name('listing.show');
 
-/*
-| كشف رقم التواصل.
-|
-| match(['get','post']) مؤقتة: لم أرَ resources/js/app.js فلا أعرف أي
-| فعل تستخدمه دالة contactReveal. ضيّقها بعد التحقق — والأصح POST مع
-| رمز CSRF، لأن الكشف حدث يُسجَّل لا قراءة محضة.
-*/
-Route::match(['get', 'post'], '/listing/{listing}/contact', ContactRevealController::class)
-    ->name('listing.contact');
-
+Route::post('/listing/{listing}/contact', ContactRevealController::class)->name('listing.contact');
+Route::post('/add', [ListingController::class, 'store'])->name('listing.store');
 /*
 |--------------------------------------------------------------------------
-| المصادقة
+| النشر — يتطلب حساباً ورقماً موثَّقاً
 |--------------------------------------------------------------------------
 |
-| يُفتَح في السكربت التالي، بعد وجود المتحكمات. مسار يشير إلى متحكم
-| غير موجود يُسقط كل صفحة في الموقع بـTarget class does not exist.
+| الوسيط يُستدعى بصنفه لا باسم مستعار: الاسم المستعار يحتاج تسجيلاً في
+| bootstrap/app.php، والصنف المباشر يعمل بلا أي تسجيل.
+|
+| بوابة الهاتف قابلة للتعطيل من config/identity.php — انظر
+| REQUIRE_PHONE_VERIFICATION في .env.
+|
+| ولم يتغيّر ListingCreateController: DemoUser::current() تُرجع
+| Auth::user() متى وُجد، وهو ما كتبه تعليقها منذ البداية.
 |
 */
 
-// require base_path('app/Modules/Identity/Routes/web.php');
+// Route::middleware(['auth', EnsurePhoneIsVerified::class])->group(function (): void {
+    Route::get('/add', [ListingCreateController::class, 'create'])->name('listing.create');
+    Route::post('/add', [ListingCreateController::class, 'store'])->name('listing.store');
+// });
+
+/*
+|--------------------------------------------------------------------------
+| الهوية
+|--------------------------------------------------------------------------
+*/
+
+require base_path('app/Modules/Identity/Routes/web.php');

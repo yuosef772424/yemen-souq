@@ -2,10 +2,10 @@
 
 namespace App\Modules\Catalog\Models;
 
+use App\Models\User;
 use App\Modules\Shared\Models\Category;
 use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Models\Location;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,6 +25,9 @@ class Listing extends Model
      * غيابها وحده يمنع تمريرها من طلب HTTP، لأن Eloquent يتجاهل $guarded
      * كلياً متى كان $fillable غير فارغ. لا تُضِف $guarded هنا: يوهم بحماية
      * ثانية غير موجودة.
+     *
+     * وبنفس المنطق: renewed_at وrenewals_count غائبان. التجديد حدث
+     * يقرّره الخادم بشروطه، لا حقل في نموذج يملأه المعلن.
      */
     protected $fillable = [
         'user_id', 'category_id', 'location_id',
@@ -48,6 +51,8 @@ class Listing extends Model
             'featured_until' => 'datetime',
             'published_at' => 'datetime',
             'expires_at' => 'datetime',
+            'renewed_at' => 'datetime',
+            'renewals_count' => 'integer',
         ];
     }
 
@@ -105,9 +110,20 @@ class Listing extends Model
         });
     }
 
+    public function scopeExpired(Builder $query): Builder
+    {
+        return $query->whereNotNull('expires_at')->where('expires_at', '<', now());
+    }
+
     public function scopePublished(Builder $query): Builder
     {
         return $query->active()->whereNotNull('published_at')->notExpired();
+    }
+
+    /** إعلانات مالك واحد — نقطة الدخول الوحيدة لكل استعلامات اللوحة */
+    public function scopeOwnedBy(Builder $query, User $user): Builder
+    {
+        return $query->where('user_id', $user->id);
     }
 
     /**
@@ -173,6 +189,44 @@ class Listing extends Model
     {
         return $this->is_featured
             && ($this->featured_until === null || $this->featured_until->isFuture());
+    }
+
+    /**
+     * الأيام المتبقية — سالبة للمنتهي، وnull لإعلان بلا تاريخ انتهاء.
+     *
+     * الحساب من بداية اليوم لا من اللحظة: «يتبقى يوم واحد» أوضح
+     * للمعلن من «يتبقى 0 أيام» لإعلان ينتهي بعد ثلاث ساعات.
+     */
+    public function daysUntilExpiry(): ?int
+    {
+        if ($this->expires_at === null) {
+            return null;
+        }
+
+        // diffInDays يُرجع float في Carbon 3 — التقريب صريح لا ضمني
+        return (int) round(now()->startOfDay()->diffInDays($this->expires_at->startOfDay(), false));
+    }
+
+    /** حالة معروضة للمعلن — تدمج الحالة المخزّنة مع الانتهاء الزمني */
+    public function ownerStatusLabel(): string
+    {
+        if ($this->trashed()) {
+            return 'محذوف';
+        }
+
+        if ($this->isExpired()) {
+            return 'منتهي';
+        }
+
+        return match ($this->status) {
+            'active' => 'منشور',
+            'paused' => 'موقوف',
+            'sold' => 'تم البيع',
+            'draft' => 'مسودة',
+            'pending' => 'بانتظار المراجعة',
+            'rejected' => 'مرفوض',
+            default => $this->status,
+        };
     }
 
     public function getRouteKeyName(): string

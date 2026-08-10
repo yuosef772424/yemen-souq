@@ -4,6 +4,9 @@ use App\Modules\Catalog\Http\Controllers\AccountListingController;
 use App\Modules\Catalog\Http\Controllers\ContactRevealController;
 use App\Modules\Catalog\Http\Controllers\ListingController;
 use App\Modules\Catalog\Http\Controllers\ListingCreateController;
+use App\Modules\Engagement\Http\Controllers\ConversationController;
+use App\Modules\Engagement\Http\Controllers\FavoriteController;
+use App\Modules\Engagement\Http\Controllers\ListingQuestionController;
 use App\Modules\Identity\Http\Middleware\EnsurePhoneIsVerified;
 use App\Modules\Search\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
@@ -24,13 +27,6 @@ Route::post('/listing/{listing}/contact', ContactRevealController::class)->name(
 |--------------------------------------------------------------------------
 | النشر — يتطلب حساباً ورقماً موثَّقاً
 |--------------------------------------------------------------------------
-|
-| الوسيط يُستدعى بصنفه لا باسم مستعار: الاسم المستعار يحتاج تسجيلاً في
-| bootstrap/app.php، والصنف المباشر يعمل بلا أي تسجيل.
-|
-| بوابة الهاتف قابلة للتعطيل من config/identity.php — انظر
-| REQUIRE_PHONE_VERIFICATION في .env.
-|
 */
 
 Route::middleware(['auth', EnsurePhoneIsVerified::class])->group(function (): void {
@@ -40,24 +36,43 @@ Route::middleware(['auth', EnsurePhoneIsVerified::class])->group(function (): vo
 
 /*
 |--------------------------------------------------------------------------
-| لوحة المعلن
+| التفاعل — يتطلب حساباً فقط
 |--------------------------------------------------------------------------
 |
-| auth وحده — بلا EnsurePhoneIsVerified، بقصد.
+| بلا EnsurePhoneIsVerified بقصد، وبنفس منطق لوحة المعلن: بوابة الهاتف
+| تخصّ *إنشاء* محتوى معروض للسوق. أما سؤال البائع أو حفظ إعلان في
+| المفضلة فسلوك مشترٍ — وحظره يحرم المنصة من الطرف الذي تحتاجه أكثر.
 |
-| السبب: بوابة الهاتف تخصّ إنشاء محتوى جديد. أما من نشر قبل تشغيل
-| البوابة، أو تغيّر رقمه، أو شُغِّلت البوابة بعد نشره — فمنعه من إدارة
-| إعلاناته القائمة يتركه بإعلان حيّ لا يستطيع حذفه ولا تصحيح سعره،
-| والمتضرّر هو المشتري الذي يتصل برقم قديم. حظر الإنشاء إجراء وقائي؛
-| حظر الحذف عقوبة على المشتري.
+| والسبام يُحسب له هنا بحدّ زمني على الإرسال لا ببوابة توثيق: البوابة
+| تمنع المشتري الجدّي مثل ما تمنع المُزعِج.
 |
-| withTrashed على مسار الاستعادة فقط: الاستعادة تعمل على صف محذوف
-| منطقياً بالتعريف، وبقية المسارات يجب أن تعيد 404 لإعلان محذوف.
+*/
+
+Route::middleware('auth')->group(function (): void {
+    Route::post('/listing/{listing}/favorite', [FavoriteController::class, 'toggle'])
+        ->name('listing.favorite');
+
+    Route::post('/listing/{listing}/questions', [ListingQuestionController::class, 'store'])
+        ->name('listing.questions.store');
+
+    Route::post('/questions/{question}/answer', [ListingQuestionController::class, 'answer'])
+        ->name('questions.answer');
+
+    Route::delete('/questions/{question}', [ListingQuestionController::class, 'destroy'])
+        ->name('questions.destroy');
+
+    // بدء المحادثة من صفحة الإعلان
+    Route::post('/listing/{listing}/messages', [ConversationController::class, 'store'])
+        ->name('listing.messages.store');
+});
+
+/*
+|--------------------------------------------------------------------------
+| لوحة الحساب
+|--------------------------------------------------------------------------
 |
-| scopeBindings على مسار الصورة: يُلزم لارافل بحلّ {image} عبر علاقة
-| images الخاصة بـ{listing}. بلا هذا القيد يقبل المسار معرّف صورة من
-| إعلان آخر، فيحذف المعلن صور غيره بتغيير رقم في الرابط — والصلاحية
-| على {listing} وحدها لا تكشف ذلك.
+| withTrashed على مسار الاستعادة فقط، وscopeBindings على مسار الصورة —
+| بلا الثاني يقبل المسار معرّف صورة من إعلان آخر.
 |
 */
 
@@ -79,6 +94,13 @@ Route::middleware('auth')->prefix('account')->name('account.')->group(function (
     Route::delete('/listings/{listing}/images/{image}', [AccountListingController::class, 'destroyImage'])
         ->name('listings.images.destroy')
         ->scopeBindings();
+
+    // التفاعل
+    Route::get('/favorites', [FavoriteController::class, 'index'])->name('favorites');
+    Route::get('/messages', [ConversationController::class, 'index'])->name('messages');
+    Route::get('/messages/{conversation}', [ConversationController::class, 'show'])->name('messages.show');
+    Route::post('/messages/{conversation}', [ConversationController::class, 'reply'])->name('messages.reply');
+    Route::get('/questions', [ListingQuestionController::class, 'inbox'])->name('questions');
 });
 
 /*

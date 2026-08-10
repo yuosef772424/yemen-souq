@@ -1,0 +1,88 @@
+<?php
+
+namespace App\Modules\Engagement\Services;
+
+use App\Models\User;
+use App\Modules\Catalog\Models\Listing;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * إضافة الإعلان إلى المفضلة وإزالته، مع العدّاد.
+ *
+ * ═══ لماذا insertOrIgnore ثم فحص عدد الصفوف المتأثرة ═══
+ *
+ * العدّاد listings.favorites_count ذاكرة محسوبة، ومصدر الحقيقة جدول
+ * favorites. والخطأ الشائع هنا: «أدرج ثم زد العدّاد». ضغطتان متلاحقتان
+ * على الزر (أو نقرة مزدوجة على اتصال بطيء) تعطيان إدراجاً واحداً —
+ * يمنعه المفتاح المركّب — وزيادتين للعدّاد. فيصبح العدّاد أكبر من عدد
+ * الصفوف، ولا شيء يكشف ذلك لاحقاً.
+ *
+ * insertOrIgnore يُرجع عدد الصفوف المُدرجة فعلاً. العدّاد يزيد إن كان
+ * واحداً، ولا يزيد إن كان صفراً. المعاملة تجعل الاثنين ذرّة واحدة.
+ *
+ * ═══ ولماذا عدّاد أصلاً ═══
+ *
+ * لأن بطاقة الإعلان في نتائج البحث تعرضه، وحساب COUNT لكل بطاقة في كل
+ * صفحة نتائج يعني 24 استعلاماً إضافياً. العدّاد يُقرأ مع الصف نفسه.
+ */
+final class FavoriteToggler
+{
+    /**
+     * @return bool صار مفضّلاً (true) أو أُزيل (false)
+     */
+    public function toggle(User $user, Listing $listing): bool
+    {
+        return DB::transaction(function () use ($user, $listing): bool {
+            $inserted = DB::table('favorites')->insertOrIgnore([
+                'user_id' => $user->id,
+                'listing_id' => $listing->id,
+                'created_at' => now(),
+            ]);
+
+            if ($inserted === 1) {
+                $this->adjust($listing, 1);
+
+                return true;
+            }
+
+            $deleted = DB::table('favorites')
+                ->where('user_id', $user->id)
+                ->where('listing_id', $listing->id)
+                ->delete();
+
+            if ($deleted === 1) {
+                $this->adjust($listing, -1);
+            }
+
+            return false;
+        });
+    }
+
+    public function has(User $user, Listing $listing): bool
+    {
+        return DB::table('favorites')
+            ->where('user_id', $user->id)
+            ->where('listing_id', $listing->id)
+            ->exists();
+    }
+
+    /**
+     * العدّاد لا ينزل تحت الصفر.
+     *
+     * unsignedInteger في المخطط، فقيمة سالبة خطأ SQL يُسقط الطلب. وحدوثه
+     * ممكن: صف أُدرج قبل وجود هذه الخدمة، أو عدّاد أُعيد ضبطه يدوياً.
+     * الحدّ عند الصفر يجعل العطل انحرافاً في رقم لا صفحة خطأ.
+     */
+    private function adjust(Listing $listing, int $delta): void
+    {
+        $query = Listing::withTrashed()->whereKey($listing->getKey());
+
+        if ($delta > 0) {
+            $query->increment('favorites_count', $delta);
+
+            return;
+        }
+
+        $query->where('favorites_count', '>', 0)->decrement('favorites_count', abs($delta));
+    }
+}

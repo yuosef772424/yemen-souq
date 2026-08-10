@@ -15,41 +15,96 @@ use Illuminate\Support\Facades\DB;
  * محرك البحث.
  *
  * القرار المحوري: النطاق السعري الذي يكتبه المستخدم يُحوَّل مرة واحدة
- * إلى عملة الأساس، ثم يُقارن بعمود price_in_base المفهرس.
+ * إلى عملة الأساس، ثم يُقارن بعمود price_in_base المفهرس. البديل الخاطئ
+ * الشائع — تحويل سعر كل إعلان أثناء الاستعلام — يمنع استخدام الفهرس
+ * ويجعل البحث يبطؤ خطياً مع عدد الإعلانات.
  *
- * البديل الخاطئ الشائع: تحويل سعر كل إعلان أثناء الاستعلام. ذلك يمنع
- * استخدام الفهرس ويجعل البحث يبطؤ خطياً مع عدد الإعلانات.
+ * ═══ الثغرة المُسدَّدة في هذه النسخة ═══
+ *
+ * كانت المطابقة اشتراطاً صارماً لكل كلمة: كلمة واحدة غائبة تعني صفر
+ * نتائج. و«تويوتا كورولا 2018 اوتوماتيك صنعاء» استعلام واقعي تماماً،
+ * وكفيل بأن يُرجع صفراً حتى مع وجود عشرين كورولا في صنعاء — لأن
+ * «اوتوماتيك» لم يكتبها المعلن.
+ *
+ * البنية الآن ثلاث درجات، بنفس الترتيب المطلوب:
+ *
+ *   1. تام    كل كلمة موجودة (بذاتها أو بمكافئها)
+ *   2. قريب   إن أعطت الدرجة الأولى صفراً: كلمة واحدة تكفي، والترتيب
+ *             بعدد الكلمات المطابقة تنازلياً
+ *   3. رواج   ليس بعد — يحتاج بيانات سلوك حقيقية، وهو المرحلة التالية
+ *
+ * والدرجة الثانية لا تعمل إلا عند فشل الأولى. البديل المرفوض: تشغيلها
+ * دائماً والاكتفاء بالترتيب. مرفوض لأن مطابقة كلمة واحدة من أربع تعني
+ * صفحات من ضجيج فوق النتائج الصحيحة، وثقة المستخدم بالنتيجة أغلى من
+ * تغطية إضافية لا يريدها.
+ *
+ * الكلفة: بحث بصفر نتائج يمسح الجدول مرتين بدل مرة. مقبول لأنه الحالة
+ * التي يخرج فيها المستخدم من المنصة إن لم نُصلحها.
  */
 final class SearchQueryBuilder
 {
+    public const MODE_STRICT = 'strict';
+
+    public const MODE_LOOSE = 'loose';
+
     public function __construct(
         private readonly SearchTokenizer $tokenizer,
+        private readonly SynonymExpander $synonyms,
         private readonly ExchangeRateService $rates,
     ) {
     }
 
-    public function paginate(SearchCriteria $criteria): LengthAwarePaginator
+    /**
+     * البحث بدرجاته.
+     *
+     * @return array{listings: LengthAwarePaginator, mode: string}
+     *         mode ∈ browse | exact | near | none
+     */
+    public function search(SearchCriteria $criteria): array
     {
-        return $this->build($criteria)
+        if (! $criteria->hasQuery()) {
+            return [
+                'listings' => $this->paginate($criteria, self::MODE_STRICT),
+                'mode' => 'browse',
+            ];
+        }
+
+        $strict = $this->paginate($criteria, self::MODE_STRICT);
+
+        if ($strict->total() > 0) {
+            return ['listings' => $strict, 'mode' => 'exact'];
+        }
+
+        $loose = $this->paginate($criteria, self::MODE_LOOSE);
+
+        return [
+            'listings' => $loose,
+            'mode' => $loose->total() > 0 ? 'near' : 'none',
+        ];
+    }
+
+    public function paginate(SearchCriteria $criteria, string $mode = self::MODE_STRICT): LengthAwarePaginator
+    {
+        return $this->build($criteria, $mode)
             ->paginate($criteria->perPage)
             ->withQueryString();
     }
 
-    public function count(SearchCriteria $criteria): int
+    public function count(SearchCriteria $criteria, string $mode = self::MODE_STRICT): int
     {
-        return $this->build($criteria)->count();
+        return $this->build($criteria, $mode)->count();
     }
 
-    public function build(SearchCriteria $criteria): Builder
+    public function build(SearchCriteria $criteria, string $mode = self::MODE_STRICT): Builder
     {
         $query = Listing::query()
             ->published()
             ->with(['currency', 'category', 'location', 'images']);
 
-        $this->applyText($query, $criteria);
+        $this->applyText($query, $criteria, $mode);
         $this->applyPrice($query, $criteria);
         $this->applyFacets($query, $criteria);
-        $this->applySort($query, $criteria);
+        $this->applySort($query, $criteria, $mode);
 
         return $query;
     }
@@ -59,30 +114,56 @@ final class SearchQueryBuilder
     /**
      * المطابقة تجري على search_blob وحده.
      *
-     * كانت على title_normalized و description_normalized، فكان
-     * «شقة في حدة» يفشل لأن اسم المديرية مفتاح أجنبي لا نص.
-     * والعمود المجمّع يضم العنوان والوصف والتصنيف والموقع والمحافظة.
+     * كانت على title_normalized وdescription_normalized، فكان «شقة في
+     * حدة» يفشل لأن اسم المديرية مفتاح أجنبي لا نص. والعمود المجمّع يضم
+     * العنوان والوصف والتصنيف والموقع والمحافظة.
      *
-     * نستخدم LIKE لا MATCH لأن محلل MySQL الافتراضي لا يفهم
-     * سوابق ولواحق العربية، فيفوّت "بالسيارة" عند البحث عن "سيارة".
+     * نستخدم LIKE لا MATCH لأن محلل MySQL الافتراضي لا يفهم سوابق
+     * ولواحق العربية، فيفوّت «بالسيارة» عند البحث عن «سيارة».
      */
-    private function applyText(Builder $query, SearchCriteria $criteria): void
+    private function applyText(Builder $query, SearchCriteria $criteria, string $mode): void
+    {
+        $groups = $this->groups($criteria);
+
+        if ($groups === []) {
+            return;
+        }
+
+        if ($mode === self::MODE_STRICT) {
+            // كل مجموعة شرط لازم، وداخل المجموعة الكلمة أو أحد مكافئاتها
+            $query->where(function (Builder $outer) use ($groups): void {
+                foreach ($groups as $group) {
+                    $outer->where(function (Builder $inner) use ($group): void {
+                        foreach ($group as $variant) {
+                            $inner->orWhere('search_blob', 'like', "%{$variant}%");
+                        }
+                    });
+                }
+            });
+
+            return;
+        }
+
+        // الدرجة الثانية: مجموعة واحدة تكفي — والترتيب هو ما يفصل
+        $query->where(function (Builder $outer) use ($groups): void {
+            foreach ($groups as $group) {
+                foreach ($group as $variant) {
+                    $outer->orWhere('search_blob', 'like', "%{$variant}%");
+                }
+            }
+        });
+    }
+
+    /** @return array<int, array<int, string>> */
+    private function groups(SearchCriteria $criteria): array
     {
         if (! $criteria->hasQuery()) {
-            return;
+            return [];
         }
 
         $tokens = $this->tokenizer->tokens($criteria->query);
 
-        if ($tokens === []) {
-            return;
-        }
-
-        $query->where(function (Builder $outer) use ($tokens): void {
-            foreach ($tokens as $token) {
-                $outer->where('search_blob', 'like', "%{$token}%");
-            }
-        });
+        return $tokens === [] ? [] : $this->synonyms->expand($tokens);
     }
 
     // ---- السعر: جوهر المشروع ----
@@ -146,10 +227,16 @@ final class SearchQueryBuilder
 
     // ---- الترتيب ----
 
-    private function applySort(Builder $query, SearchCriteria $criteria): void
+    private function applySort(Builder $query, SearchCriteria $criteria, string $mode): void
     {
         // المميّزة أولاً — والنطاق يتحقق من سريان الترقية لا من العلم وحده
         $query->featuredFirst();
+
+        // في الدرجة الثانية يتقدّم عدد الكلمات المطابقة على كل ما بعده:
+        // النتيجة التي طابقت ثلاث كلمات أقرب حتماً من التي طابقت واحدة
+        if ($mode === self::MODE_LOOSE) {
+            $this->applyMatchCount($query, $criteria);
+        }
 
         $this->applyRelevance($query, $criteria);
 
@@ -163,6 +250,32 @@ final class SearchQueryBuilder
         };
     }
 
+    /** عدد مجموعات الكلمات التي طابقت النص المجمّع */
+    private function applyMatchCount(Builder $query, SearchCriteria $criteria): void
+    {
+        $groups = $this->groups($criteria);
+
+        if ($groups === []) {
+            return;
+        }
+
+        $cases = [];
+        $bindings = [];
+
+        foreach ($groups as $group) {
+            $conditions = [];
+
+            foreach ($group as $variant) {
+                $conditions[] = 'search_blob like ?';
+                $bindings[] = '%' . $variant . '%';
+            }
+
+            $cases[] = 'case when (' . implode(' or ', $conditions) . ') then 1 else 0 end';
+        }
+
+        $query->orderByRaw('(' . implode(' + ', $cases) . ') desc', $bindings);
+    }
+
     /**
      * إشارتا الصلة، بهذا الترتيب:
      *
@@ -171,19 +284,18 @@ final class SearchQueryBuilder
      *
      * ثم يكسر التعادل الترتيب المطلوب (الأحدث افتراضاً).
      *
-     * لماذا عدّ لا اشتراط كل الكلمات: كان الشرط «كل الكلمات في العنوان»،
-     * واسم المدينة لا يكون في العنوان أبداً — هو في النص المجمّع. فأي
-     * استعلام من شكل «سلعة + مدينة»، وهو أشيع أشكال البحث في اليمن،
-     * كان يُسقط كل النتائج إلى مستوى واحد فيعود الترتيب إلى التاريخ وحده.
-     * الصلة تتعطّل صامتةً — وميزة تبدو عاملة وهي معطّلة أسوأ من غيابها.
+     * لماذا عدّ لا اشتراط كل الكلمات: اسم المدينة لا يكون في العنوان
+     * أبداً — هو في النص المجمّع. فأي استعلام من شكل «سلعة + مدينة»،
+     * وهو أشيع أشكال البحث في اليمن، كان يُسقط كل النتائج إلى مستوى
+     * واحد فيعود الترتيب إلى التاريخ وحده.
      *
-     * ولماذا يبقى هذا مقبولاً بعد رفض المجموع المرجّح (0.6×صلة + 0.4×رواج):
-     * العدّ ليس وزناً. «عنوانه طابق كلمتين من كلماتك وعنوانك واحدة» جملة
-     * يفهمها البائع؛ «درجته 0.73» ليست كذلك. الرفض كان للأوزان المخترعة
-     * التي لا تُضبط بلا حركة مرور، لا لكل حساب.
+     * ولماذا يبقى هذا مقبولاً بعد رفض المجموع المرجّح (0.6×صلة +
+     * 0.4×رواج): العدّ ليس وزناً. «عنوانه طابق كلمتين من كلماتك» جملة
+     * يفهمها البائع؛ «درجته 0.73» ليست كذلك.
      *
-     * ولماذا لا يُطبَّق عند ترتيب صريح بالسعر: من طلب «الأرخص أولاً»
-     * يريد عمود سعر مرتّباً. الاختيار الصريح يتقدّم على الصلة.
+     * وهنا العنوان وحده لا النص المجمّع، عن قصد: العنوان ما اختاره
+     * المعلن ليصف السلعة، والنص المجمّع يضم اسم المحافظة والتصنيف —
+     * فلو عُدَّ عليه لتساوت كل إعلانات صنعاء في الصلة.
      */
     private function applyRelevance(Builder $query, SearchCriteria $criteria): void
     {
@@ -221,14 +333,17 @@ final class SearchQueryBuilder
 
     /**
      * توزيع النتائج على العملات — يُعرض بجانب فلتر العملة.
-     * يُظهر للمستخدم أن النتائج فعلاً مختلطة العملات، بدل أن يفاجأ بذلك.
      *
      * reorder() ضرورية: تُزيل ترتيب الصلة وارتباطاته، وGROUP BY لا يقبل
      * ترتيباً بتعبير على عمود غير مجمَّع.
+     *
+     * والدرجة تُمرَّر من المتحكّم: لو حُسب التوزيع دائماً بالدرجة الأولى
+     * لعرض «0 نتيجة بالريال» فوق صفحة مليئة بنتائج الدرجة الثانية —
+     * رقمان متناقضان في شاشة واحدة.
      */
-    public function currencyBreakdown(SearchCriteria $criteria): array
+    public function currencyBreakdown(SearchCriteria $criteria, string $mode = self::MODE_STRICT): array
     {
-        return $this->build($criteria)
+        return $this->build($criteria, $mode)
             ->reorder()
             ->select('currency_code', DB::raw('count(*) as total'))
             ->groupBy('currency_code')

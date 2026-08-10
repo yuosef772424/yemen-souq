@@ -25,6 +25,13 @@
     </ol>
 </nav>
 
+@if ($isOwner)
+    <p class="mb-4 rounded-xl border border-line bg-tint px-4 py-2.5 text-xs">
+        هذه معاينة إعلانك — زياراتك له لا تُحسب في المشاهدات.
+        <a href="{{ route('account.listings.edit', $listing) }}" class="font-medium text-brand-dark hover:underline">تعديل</a>
+    </p>
+@endif
+
 <div class="grid gap-6 lg:grid-cols-[1fr_340px]">
 
     <div class="space-y-5">
@@ -61,7 +68,7 @@
         <div class="rounded-2xl border border-line bg-white p-5">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <h1 class="text-xl font-bold leading-snug">{{ $listing->title }}</h1>
-                @if ($listing->is_featured)
+                @if ($listing->isFeaturedNow())
                     <span class="rounded-md bg-ink px-2 py-0.5 text-[11px] font-semibold text-white">مميّز</span>
                 @endif
             </div>
@@ -96,6 +103,14 @@
                 </div>
             @endif
         </div>
+
+        {{-- الأسئلة العامة: الوحدة تملك القالب، والصفحة تؤلّف --}}
+        @include('engagement::partials.questions', [
+            'listing' => $listing,
+            'questions' => $questions,
+            'canAsk' => $canAsk,
+            'isOwner' => $isOwner,
+        ])
     </div>
 
     {{-- العمود الجانبي --}}
@@ -128,10 +143,27 @@
                     @endif
                 </div>
             @endif
+
+            {{-- المفضلة: نموذج POST لا زرّ Alpine.
+                 الحفظ يجب أن يعمل بلا JavaScript — وهو أول ما يسقط على
+                 اتصال ضعيف، وهناك بالضبط يحفظ الناس ليعودوا لاحقاً --}}
+            @auth
+                <form method="POST" action="{{ route('listing.favorite', $listing) }}" class="mt-4">
+                    @csrf
+                    <button type="submit"
+                            @class([
+                                'w-full rounded-xl border px-4 py-2.5 text-sm font-semibold transition',
+                                'border-brand bg-brand/5 text-brand-dark' => $isFavorited,
+                                'border-line hover:bg-tint' => ! $isFavorited,
+                            ])>
+                        {{ $isFavorited ? '★ في المفضلة' : '☆ أضف إلى المفضلة' }}
+                    </button>
+                </form>
+            @endauth
         </div>
 
         <div class="rounded-2xl border border-line bg-white p-5">
-            <p class="text-sm font-semibold">{{ $listing->user?->name ?? 'معلن' }}</p>
+            <p class="text-sm font-semibold">{{ $listing->user?->displayName() ?? 'معلن' }}</p>
             <p class="mt-0.5 text-xs text-muted">عضو منذ {{ $listing->user?->created_at?->translatedFormat('F Y') }}</p>
 
             @if ($listing->contact_phone && ! $listing->hide_phone)
@@ -146,6 +178,31 @@
 
                     <p x-show="error" x-cloak x-text="error" class="mt-2 text-xs text-red-700"></p>
                 </div>
+            @endif
+
+            {{-- المراسلة الخاصة: هنا يجوز تبادل الأرقام، وفي السؤال العام لا --}}
+            @if ($canMessage)
+                <form method="POST" action="{{ route('listing.messages.store', $listing) }}" class="mt-4 border-t border-line pt-4">
+                    @csrf
+                    <label for="message-body" class="block text-xs font-semibold">راسل المعلن</label>
+                    <textarea id="message-body" name="body" rows="3" maxlength="2000" required
+                              placeholder="السلام عليكم، هل الإعلان ما زال متاحاً؟"
+                              class="mt-1.5 w-full rounded-xl border border-line px-3 py-2 text-sm focus:border-brand focus:outline-none">{{ old('body') }}</textarea>
+
+                    @error('body')
+                        <p class="mt-1 text-xs text-red-700">{{ $message }}</p>
+                    @enderror
+
+                    <button type="submit"
+                            class="mt-2 w-full rounded-xl border border-line px-4 py-2.5 text-sm font-semibold transition hover:bg-tint">
+                        إرسال رسالة
+                    </button>
+                </form>
+            @elseif (! auth()->check())
+                <p class="mt-4 border-t border-line pt-4 text-xs text-muted">
+                    <a href="{{ route('login') }}" class="font-medium text-brand-dark hover:underline">سجّل الدخول</a>
+                    لمراسلة المعلن.
+                </p>
             @endif
 
             <p class="mt-3 text-[11px] leading-relaxed text-muted">

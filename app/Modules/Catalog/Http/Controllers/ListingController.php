@@ -5,41 +5,52 @@ namespace App\Modules\Catalog\Http\Controllers;
 use App\Modules\Analytics\Events\EventName;
 use App\Modules\Analytics\Services\EventRecorder;
 use App\Modules\Catalog\Models\Listing;
+use App\Modules\Engagement\Services\ConversationService;
+use App\Modules\Engagement\Services\FavoriteToggler;
+use App\Modules\Engagement\Services\QuestionService;
 use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Services\ExchangeRateService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
+/**
+ * صفحة الإعلان.
+ *
+ * تعتمد على ثلاث خدمات من وحدة Engagement. والاتجاه صحيح: Engagement
+ * يعتمد على Catalog (المحادثة تخصّ إعلاناً)، وCatalog يستهلك خدماتها في
+ * طبقة العرض وحدها — لا في الموديل ولا في الـObserver. لو استوردت
+ * Listing أو ListingObserver شيئاً من Engagement لصار الاعتماد دائرياً،
+ * وذلك هو الخط الذي لا يُعبَر.
+ */
 class ListingController
 {
     public function __construct(
         private readonly ExchangeRateService $rates,
         private readonly EventRecorder $events,
+        private readonly FavoriteToggler $favorites,
+        private readonly QuestionService $questions,
+        private readonly ConversationService $conversations,
     ) {}
 
     public function show(Request $request, Listing $listing): View
     {
-        $isOwner = $request->user()?->id === $listing->user_id;
+        $user = $request->user();
+        $isOwner = $user?->id === $listing->user_id;
 
-        // المالك يرى إعلانه في كل حالة — وإلا فتعديل إعلان موقوف يقود
-        // إلى 404 عند «معاينة» ما عُدِّل، وهو طريق مسدود بلا سبب مفهوم
+        // المالك يرى إعلانه في كل حالة — وإلا فمعاينة ما عُدِّل تقود إلى 404
         abort_unless($listing->status === 'active' || $isOwner, 404);
 
         $listing->load(['currency', 'category.parent', 'location.parent', 'images', 'user']);
 
         /**
-         * زيارة المالك لإعلانه لا تُحسب.
+         * زيارة المالك لإعلانه لا تُحسب — لا في العدّاد ولا في الأحداث.
          *
-         * السبب عمليّ: المعلن يفتح إعلانه ليتأكد أنه ظهر، ثم يفتحه ليرى
-         * المشاهدات، ثم يحدّث الصفحة. كل ذلك يزيد العدّاد — فيصبح الرقم
-         * الذي جاء ليقرأه من صنعه هو. وأسوأ من رقم مفقود رقمٌ يبدو
-         * صحيحاً وليس كذلك.
-         *
-         * والحدث يُستثنى معه لا العدّاد وحده: لو استُثني العدّاد فقط،
-         * لاختلف رقم الصفحة عن رقم listing_daily_stats بلا تفسير.
+         * المعلن يفتح إعلانه ليتأكد أنه ظهر، ثم ليرى المشاهدات، ثم يحدّث
+         * الصفحة. فيصبح الرقم الذي جاء ليقرأه من صنعه هو. وأسوأ من رقم
+         * مفقود رقمٌ يبدو صحيحاً وليس كذلك.
          */
         if (! $isOwner) {
-            // زيادة العدّاد بلا لمس updated_at — وإلا بدا كل إعلان مُعدَّلاً للتو
+            // زيادة بلا لمس updated_at — وإلا بدا كل إعلان مُعدَّلاً للتو
             $listing->newQuery()->whereKey($listing->getKey())->increment('views_count');
 
             $this->recordVisit($request, $listing);
@@ -51,15 +62,21 @@ class ListingController
             'equivalents' => $this->equivalents($listing),
             'similar' => $this->similar($listing),
             'isOwner' => $isOwner,
+
+            // التفاعل: كل قرار عرض محسوب في الخادم لا في القالب —
+            // زرّ يظهر ثم يُرفض بعد الضغط أسوأ من زرّ لا يظهر
+            'questions' => $this->questions->forListing($listing),
+            'isFavorited' => $user !== null && $this->favorites->has($user, $listing),
+            'canAsk' => $user !== null && $this->questions->canAsk($user, $listing),
+            'canMessage' => $user !== null && $this->conversations->canStart($user, $listing),
         ]);
     }
 
     /**
      * حدث المشاهدة، وحدث النقر إن جاء من نتائج البحث.
      *
-     * لماذا نتتبّع النقرة هنا لا بـJavaScript في صفحة النتائج:
-     * الرابط يحمل from وpos وq، فالنقرة تُسجَّل بمجرد وصول الزائر.
-     * أبسط، ولا يفقد أحداثاً إن كان JS معطّلاً أو الشبكة انقطعت.
+     * لماذا هنا لا بـJavaScript في صفحة النتائج: الرابط يحمل from وpos
+     * وq، فالنقرة تُسجَّل بمجرد وصول الزائر — ولا تُفقد إن كان JS معطّلاً.
      */
     private function recordVisit(Request $request, Listing $listing): void
     {
@@ -82,10 +99,8 @@ class ListingController
     }
 
     /**
-     * السعر مُعبَّراً عنه بكل العملات النشطة.
-     *
-     * هذه هي المشكلة الأصلية معكوسة: بدل أن يخمّن المشتري قيمة رقم
-     * بعملة لا يفكر بها، نعرضها له بعملته صريحةً.
+     * السعر مُعبَّراً عنه بكل العملات النشطة — المشكلة الأصلية معكوسة:
+     * بدل أن يخمّن المشتري قيمة رقم بعملة لا يفكر بها، نعرضها بعملته.
      */
     private function equivalents(Listing $listing): array
     {

@@ -15,7 +15,7 @@
 <body class="min-h-screen bg-canvas text-ink antialiased">
 
 <header class="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
-    <div class="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+    <div class="mx-auto flex max-w-6xl items-center gap-2 px-4 py-3">
         <a href="{{ route('search') }}" class="flex items-center gap-2 shrink-0">
             <span class="grid size-9 place-items-center rounded-lg bg-ink text-sm font-bold text-white">سوق</span>
             <span class="hidden text-base font-semibold sm:block">سوق يمني</span>
@@ -24,16 +24,25 @@
         <div class="flex-1"></div>
 
         @auth
-            <a href="{{ route('account.listings') }}"
-               class="rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-ink">
-                إعلاناتي
-            </a>
+            {{--
+                روابط بلا عدّاد غير مقروء بقصد.
 
-            <span class="hidden text-sm text-muted sm:block">{{ auth()->user()->displayName() }}</span>
+                شارة «3 رسائل جديدة» في الترويسة تعني استعلام COUNT في كل
+                صفحة من الموقع لكل مستخدم مسجَّل — بما فيها صفحات لا علاقة
+                لها بالرسائل. الرقم يُعرض في صفحة الرسائل نفسها حيث يُقرأ.
+            --}}
+            <nav class="flex items-center gap-1 text-sm" aria-label="حسابي">
+                <a href="{{ route('account.listings') }}"
+                   class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">إعلاناتي</a>
+                <a href="{{ route('account.messages') }}"
+                   class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">رسائلي</a>
+                <a href="{{ route('account.favorites') }}"
+                   class="hidden rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink sm:block">المفضلة</a>
+            </nav>
 
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
-                <button type="submit" class="rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-ink">
+                <button type="submit" class="rounded-lg px-2.5 py-2 text-sm font-medium text-muted transition hover:text-ink">
                     خروج
                 </button>
             </form>
@@ -43,7 +52,7 @@
             </a>
         @endauth
 
-        <a href="{{ route('listing.create') }}" class="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+        <a href="{{ route('listing.create') }}" class="shrink-0 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
             أضف إعلانك
         </a>
     </div>
@@ -59,7 +68,7 @@
         </div>
     @endif
 
-    {{-- محاولة مرفوضة ليست نجاحاً: التجديد قبل موعده يرجع هنا لا في الشريط الأخضر --}}
+    {{-- محاولة مرفوضة ليست نجاحاً --}}
     @if (session('error'))
         <div role="alert" class="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {{ session('error') }}

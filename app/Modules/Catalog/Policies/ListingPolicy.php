@@ -48,6 +48,12 @@ class ListingPolicy
         return $this->owns($user, $listing);
     }
 
+    /** البيع والتراجع عنه — كلاهما تصريح عن سلعة المالك */
+    public function markSold(User $user, Listing $listing): bool
+    {
+        return $this->owns($user, $listing);
+    }
+
     public function viewStats(User $user, Listing $listing): bool
     {
         return $this->owns($user, $listing);

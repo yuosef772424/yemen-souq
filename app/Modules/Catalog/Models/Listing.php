@@ -3,6 +3,7 @@
 namespace App\Modules\Catalog\Models;
 
 use App\Models\User;
+use App\Modules\Catalog\Database\Factories\ListingFactory;
 use App\Modules\Shared\Models\Category;
 use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Models\Location;
@@ -51,6 +52,7 @@ class Listing extends Model
             'featured_until' => 'datetime',
             'published_at' => 'datetime',
             'expires_at' => 'datetime',
+            'sold_at' => 'datetime',
             'renewed_at' => 'datetime',
             'renewals_count' => 'integer',
         ];
@@ -234,8 +236,8 @@ class Listing extends Model
         return 'slug';
     }
 
-    protected static function newFactory(): \App\Modules\Catalog\Database\Factories\ListingFactory
+    protected static function newFactory(): ListingFactory
     {
-        return \App\Modules\Catalog\Database\Factories\ListingFactory::new();
+        return ListingFactory::new();
     }
 }

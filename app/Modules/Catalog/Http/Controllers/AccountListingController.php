@@ -8,12 +8,12 @@ use App\Modules\Catalog\Models\Listing;
 use App\Modules\Catalog\Models\ListingImage;
 use App\Modules\Catalog\Services\ListingImageService;
 use App\Modules\Catalog\Services\ListingRenewalService;
+use App\Modules\Catalog\Services\ListingSaleMarker;
 use App\Modules\Catalog\Services\ListingStatsReader;
 use App\Modules\Shared\Models\Category;
 use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Models\Location;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -32,13 +32,20 @@ use Illuminate\View\View;
  */
 class AccountListingController
 {
-    /** التبويبات: ما يمكن للنظام أن ينتجه فعلاً، لا كل قيم عمود status */
-    private const TABS = ['live', 'expired', 'trashed', 'all'];
+    /**
+     * التبويبات: ما يمكن للنظام أن ينتجه فعلاً، لا كل قيم عمود status.
+     *
+     * و«مباعة» تبويب لا حالة مخفية: الإعلان المباع يخرج من «المعروضة»
+     * ومن نتائج البحث معاً، فبلا تبويب له يختفي من كل مكان — ولا يجد
+     * المعلن طريقاً للتراجع عن نقرة خاطئة.
+     */
+    private const TABS = ['live', 'sold', 'expired', 'trashed', 'all'];
 
     public function __construct(
         private readonly ListingImageService $images,
         private readonly ListingRenewalService $renewal,
         private readonly ListingStatsReader $stats,
+        private readonly ListingSaleMarker $sales,
     ) {}
 
     // ─── إعلاناتي ───
@@ -177,6 +184,43 @@ class AccountListingController
             ->with($outcome->succeeded() ? 'status' : 'error', $outcome->message());
     }
 
+    // ─── البيع ───
+
+    /**
+     * زرّ واحد بمسارين حسب الحالة الحالية.
+     *
+     * لماذا لا مساران منفصلان: الزرّ في الواجهة واحد يتبدّل نصّه، ومساران
+     * يعنيان أن الواجهة تقرّر أيّهما تستدعي — فتُرسل «بِع» على إعلان مباع
+     * إن تأخّر تحديث الصفحة. القرار هنا مبنيّ على الحالة في قاعدة
+     * البيانات لا على ما رآه المتصفح.
+     */
+    public function toggleSold(Listing $listing): RedirectResponse
+    {
+        Gate::authorize('markSold', $listing);
+
+        if ($listing->status === 'sold') {
+            $done = $this->sales->unmarkSold($listing);
+
+            return redirect()
+                ->route('account.listings')
+                ->with(
+                    $done ? 'status' : 'error',
+                    $done ? 'أُعيد الإعلان إلى العرض.' : 'تعذّر إرجاع الإعلان.'
+                );
+        }
+
+        $done = $this->sales->markSold($listing);
+
+        return redirect()
+            ->route('account.listings', ['tab' => $done ? 'sold' : null])
+            ->with(
+                $done ? 'status' : 'error',
+                $done
+                    ? 'عُلّم الإعلان مباعاً واختفى من نتائج البحث. يمكنك التراجع من هنا.'
+                    : 'لا يمكن تعليم هذا الإعلان مباعاً في حالته الحالية.'
+            );
+    }
+
     // ─── مشاهدات ───
 
     public function stats(Listing $listing): View
@@ -221,10 +265,12 @@ class AccountListingController
                 'SUM(CASE WHEN expires_at IS NOT NULL AND expires_at < ? THEN 1 ELSE 0 END) as expired_count',
                 [$now]
             )
+            ->selectRaw("SUM(CASE WHEN status = 'sold' THEN 1 ELSE 0 END) as sold_count")
             ->first();
 
         return [
             'live' => (int) ($row->live_count ?? 0),
+            'sold' => (int) ($row->sold_count ?? 0),
             'expired' => (int) ($row->expired_count ?? 0),
             'trashed' => Listing::onlyTrashed()->ownedBy($user)->count(),
             'all' => (int) ($row->all_count ?? 0),
@@ -239,6 +285,7 @@ class AccountListingController
 
         match ($tab) {
             'live' => $query->active()->notExpired(),
+            'sold' => $query->where('status', 'sold'),
             'expired' => $query->expired(),
             'trashed' => $query->onlyTrashed(),
             default => $query,

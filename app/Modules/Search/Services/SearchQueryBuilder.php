@@ -110,6 +110,12 @@ final class SearchQueryBuilder
             return;
         }
 
+        if ($this->hasFulltext()) {
+            $this->applyFulltext($query, $groups, $mode);
+
+            return;
+        }
+
         if ($mode === self::MODE_STRICT) {
             $query->where(function (Builder $outer) use ($groups): void {
                 foreach ($groups as $group) {
@@ -131,6 +137,72 @@ final class SearchQueryBuilder
                 }
             }
         });
+    }
+
+    /**
+     * هل يوجد فهرس FULLTEXT؟
+     *
+     * sqlite لا يعرفه، فالاختبارات تسلك مسار LIKE — وهو مسار حقيقي لا
+     * محاكاة: يبقى مستعمَلاً في أي تركيب بلا الفهرس، ونتائجه يجب أن
+     * تطابق نتائج MATCH. اختبار الاسترجاع يقارن الاثنين على نفس النصوص.
+     */
+    private function hasFulltext(): bool
+    {
+        return Listing::query()->getConnection()->getDriverName() === 'mysql';
+    }
+
+    /**
+     * المطابقة على الفهرس بدل مسح الجدول.
+     *
+     * BOOLEAN MODE لا الطبيعي: الطبيعي يتجاهل الكلمات الشائعة (عتبة 50%
+     * في MyISAM) ويفرض ترتيبه بالصلة، والترتيب هنا مبنيّ صراحةً في
+     * applySort على إشارات هذا المشروع لا على TF-IDF عام.
+     *
+     * والصارم يشترط كل مجموعة بقوس منفصل، والمتراجع يكفيه واحدة —
+     * بنفس منطق مسار LIKE تماماً، فالنتائج تتطابق.
+     *
+     * والتنظيف ضروري: + و- و* و" و( ) معاملات في BOOLEAN MODE، فكلمة
+     * بحث تحمل أحدها تُغيّر معنى الاستعلام أو تُفشله.
+     *
+     * @param  array<int, array<int, string>>  $groups
+     */
+    private function applyFulltext(Builder $query, array $groups, string $mode): void
+    {
+        $clauses = [];
+
+        foreach ($groups as $group) {
+            $words = array_filter(array_map(
+                fn (string $w): string => $this->sanitize($w),
+                $group
+            ), fn (string $w): bool => $w !== '');
+
+            if ($words === []) {
+                continue;
+            }
+
+            // كل مجموعة قوس بدلالة «أيّ من مكافئاتها»
+            $clauses[] = '('.implode(' ', array_map(
+                fn (string $w): string => $w,
+                $words
+            )).')';
+        }
+
+        if ($clauses === []) {
+            return;
+        }
+
+        // الصارم: كل مجموعة لازمة — يسبقها + على القوس
+        $expression = $mode === self::MODE_STRICT
+            ? implode(' ', array_map(fn (string $c): string => '+'.$c, $clauses))
+            : implode(' ', $clauses);
+
+        $query->whereRaw('MATCH(search_blob) AGAINST (? IN BOOLEAN MODE)', [$expression]);
+    }
+
+    /** يُبقي الحروف والأرقام والمسافة — كل ما عداها معامل أو ضجيج */
+    private function sanitize(string $word): string
+    {
+        return trim(preg_replace('/[^\p{L}\p{N}]+/u', '', $word) ?? '');
     }
 
     /** @return array<int, array<int, string>> */

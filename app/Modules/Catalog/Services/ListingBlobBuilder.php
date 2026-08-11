@@ -5,6 +5,7 @@ namespace App\Modules\Catalog\Services;
 use App\Modules\Catalog\Models\Listing;
 use App\Modules\Shared\Models\Category;
 use App\Modules\Shared\Models\Location;
+use App\Modules\Shared\Services\ArabicAffixStripper;
 use App\Modules\Shared\Services\ArabicNormalizer;
 use App\Modules\Shared\Services\LatinArabicTransliterator;
 
@@ -33,8 +34,8 @@ final class ListingBlobBuilder
     public function __construct(
         private readonly ArabicNormalizer $normalizer,
         private readonly LatinArabicTransliterator $transliterator,
-    ) {
-    }
+        private readonly ArabicAffixStripper $stripper,
+    ) {}
 
     public function for(Listing $listing): string
     {
@@ -78,6 +79,35 @@ final class ListingBlobBuilder
          */
         $variants = $this->transliterator->variants($listing->title);
 
-        return $variants === [] ? $blob : $blob . ' ' . implode(' ', $variants);
+        $blob = $variants === [] ? $blob : $blob.' '.implode(' ', $variants);
+
+        return $this->withBareForms($blob);
+    }
+
+    /**
+     * الصيغ المجرَّدة تُضاف إلى النص لا تحلّ محلّه.
+     *
+     * السبب أن المطابقة صارت على فهرس FULLTEXT، وهو يطابق كلمات كاملة:
+     * البحث عن «سياره» لا يجد «بالسياره» ما لم تكن المجرَّدة مفهرسة
+     * معها. والأصلية تبقى لأن من يكتب «بالسياره» يجب أن يجدها أيضاً.
+     *
+     * والكلفة عمود أطول — ولا شيء غير ذلك: الإضافة تجري وقت الحفظ مرة
+     * واحدة، لا وقت الاستعلام في كل بحث.
+     */
+    private function withBareForms(string $blob): string
+    {
+        $words = array_filter(explode(' ', $blob), fn (string $w): bool => $w !== '');
+
+        $extra = [];
+
+        foreach (array_unique($words) as $word) {
+            $bare = $this->stripper->bare($word);
+
+            if ($bare !== null && ! in_array($bare, $words, true)) {
+                $extra[$bare] = true;
+            }
+        }
+
+        return $extra === [] ? $blob : $blob.' '.implode(' ', array_keys($extra));
     }
 }

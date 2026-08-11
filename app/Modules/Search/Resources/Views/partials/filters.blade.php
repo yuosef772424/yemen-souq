@@ -72,6 +72,9 @@
     </select>
 </fieldset>
 
+{{-- ═══ مواصفات التصنيف — بعد التصنيف مباشرة لأنها تابعة له ═══ --}}
+@include('search::partials.attribute-filters')
+
 {{-- ═══ الموقع ═══ --}}
 <fieldset class="rounded-2xl border border-line bg-white p-4">
     <legend class="px-1 text-sm font-semibold">المحافظة</legend>

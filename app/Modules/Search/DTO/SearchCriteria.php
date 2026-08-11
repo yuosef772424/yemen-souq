@@ -36,6 +36,18 @@ final readonly class SearchCriteria
      */
     public const MAX_QUERY_LENGTH = 120;
 
+    /**
+     * سقف عدد فلاتر الخصائص في الطلب الواحد.
+     *
+     * كل فلتر يصير استعلاماً فرعياً بـEXISTS. وأغزر تصنيف في البذرة له
+     * خمس خصائص، فاثنا عشر أوسع من أي استعمال حقيقي — والسقف موجود لأن
+     * الرابط يكتبه أي أحد: attr بمئة مفتاح يعني مئة استعلام فرعي.
+     */
+    public const MAX_ATTRIBUTE_FILTERS = 12;
+
+    /** attr_key كما في عمود attributes.attr_key */
+    private const ATTRIBUTE_KEY_PATTERN = '/^[a-z][a-z0-9_]{0,59}$/';
+
     public function __construct(
         public ?string $query = null,
         public ?int $categoryId = null,
@@ -50,8 +62,9 @@ final readonly class SearchCriteria
         public bool $withImageOnly = false,
         public string $sort = 'newest',
         public int $perPage = 24,
-    ) {
-    }
+        /** @var list<AttributeFilter> */
+        public array $attributes = [],
+    ) {}
 
     public static function fromRequest(Request $request): self
     {
@@ -73,7 +86,90 @@ final readonly class SearchCriteria
             withImageOnly: self::flag($request, 'with_image'),
             sort: self::pick(self::scalar($request, 'sort'), self::SORTS) ?? 'newest',
             perPage: min(max(self::id($request, 'per_page') ?? 24, 6), 60),
+            attributes: self::readAttributes($request),
         );
+    }
+
+    /**
+     * فلاتر الخصائص من المعامل attr.
+     *
+     * شكلان مقبولان:
+     *   attr[mileage][max]=100000   نطاق رقمي
+     *   attr[transmission]=3        مطابقة تامة (خيار أو نعم/لا)
+     *
+     * وكل ما عداهما يُهمَل بلا خطأ — بنفس مبدأ بقية هذا الملف: الرابط
+     * يكتبه أي أحد، ومدخل غريب يجب أن يُنتج بحثاً أوسع لا صفحة 500.
+     * والنوع الفعلي للخاصية يُحسم لاحقاً من قاعدة البيانات: نطاق على
+     * خاصية خيارات يُهمَل هناك، لا هنا.
+     *
+     * @return list<AttributeFilter>
+     */
+    private static function readAttributes(Request $request): array
+    {
+        $raw = $request->input('attr');
+
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $filters = [];
+
+        foreach ($raw as $key => $value) {
+            if (count($filters) >= self::MAX_ATTRIBUTE_FILTERS) {
+                break;
+            }
+
+            if (! is_string($key) || preg_match(self::ATTRIBUTE_KEY_PATTERN, $key) !== 1) {
+                continue;
+            }
+
+            $filter = is_array($value)
+                ? self::rangeFilter($key, $value)
+                : self::equalityFilter($key, $value);
+
+            if ($filter !== null) {
+                $filters[] = $filter;
+            }
+        }
+
+        return $filters;
+    }
+
+    /** @param array<mixed> $value */
+    private static function rangeFilter(string $key, array $value): ?AttributeFilter
+    {
+        $min = self::number($value['min'] ?? null);
+        $max = self::number($value['max'] ?? null);
+
+        if ($min === null && $max === null) {
+            return null;
+        }
+
+        // الحدّان المنقلبان يُعكسان لا يُرجعان صفر نتائج — نفس معالجة
+        // النطاق السعري في readRange
+        if ($min !== null && $max !== null && $min > $max) {
+            [$min, $max] = [$max, $min];
+        }
+
+        return new AttributeFilter($key, min: $min, max: $max);
+    }
+
+    private static function equalityFilter(string $key, mixed $value): ?AttributeFilter
+    {
+        if (! is_scalar($value) || ! is_numeric($value)) {
+            return null;
+        }
+
+        $id = (int) $value;
+
+        // صفر مقبول: قيمة «لا» في خاصية نعم/لا. والسالب لا معنى له
+        // لا كمعرّف خيار ولا كقيمة منطقية
+        return $id < 0 ? null : new AttributeFilter($key, equals: $id);
+    }
+
+    private static function number(mixed $value): ?float
+    {
+        return is_scalar($value) && is_numeric($value) ? (float) $value : null;
     }
 
     // ---- قراءة المدخلات: النوع أولاً، ثم القيمة ----
@@ -188,6 +284,7 @@ final readonly class SearchCriteria
             'condition' => $this->condition !== null,
             'sale_type' => $this->saleType !== null,
             'with_image' => $this->withImageOnly,
+            'attributes' => $this->attributes !== [],
         ]));
     }
 }

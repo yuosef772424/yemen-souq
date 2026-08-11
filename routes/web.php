@@ -105,16 +105,11 @@ Route::middleware('auth')->prefix('account')->name('account.')->group(function (
 
 /*
 |--------------------------------------------------------------------------
-| الهوية
+| مسارات الوحدات
 |--------------------------------------------------------------------------
+|
+| لا require هنا: ModuleServiceProvider يمسح app/Modules ويسجّل ملفات
+| مجلد Routes في كل وحدة ضمن مجموعة web. الهوية والتحكم والتجار
+| والإبلاغ تُحمَّل من هناك.
+|
 */
-
-require base_path('app/Modules/Identity/Routes/web.php');
-// وحدة التحكم
-require __DIR__ . '/../app/Modules/Admin/Routes/web.php';
-
-// الإبلاغ عن إعلان
-require __DIR__ . '/../app/Modules/Engagement/Routes/reports.php';
-
-// وحدة التجار
-require __DIR__ . '/../app/Modules/Merchant/Routes/web.php';

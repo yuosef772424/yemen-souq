@@ -54,12 +54,14 @@
             @endforeach
 
             @if ($isAdmin)
-                <a href="{{ route('admin.users') }}"
-                   @class([
-                       'rounded-lg px-2.5 py-2 font-medium transition',
-                       'bg-tint text-ink' => request()->routeIs('admin.users'),
-                       'text-muted hover:text-ink' => ! request()->routeIs('admin.users'),
-                   ])>الحسابات</a>
+                @foreach (['admin.users' => 'الحسابات', 'admin.categories' => 'التصنيفات', 'admin.attributes' => 'الخصائص'] as $route => $label)
+                    <a href="{{ route($route) }}"
+                       @class([
+                           'rounded-lg px-2.5 py-2 font-medium transition',
+                           'bg-tint text-ink' => request()->routeIs($route),
+                           'text-muted hover:text-ink' => ! request()->routeIs($route),
+                       ])>{{ $label }}</a>
+                @endforeach
             @endif
         </nav>
 

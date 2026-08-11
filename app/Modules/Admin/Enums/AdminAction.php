@@ -28,6 +28,22 @@ enum AdminAction: string
     case UserRoleChanged = 'user_role_changed';
 
     /**
+     * التصنيف والخاصية بنية لا محتوى.
+     *
+     * إجراءات منفصلة عن إشراف المحتوى بقصد: تعطيل تصنيف يُخفي كل
+     * إعلاناته من التصفّح دفعةً واحدة، وتغيير خاصية يمسّ كل إعلان في
+     * كل تصنيف مرتبط بها. أثرها أوسع من أي إجراء على إعلان واحد،
+     * فتمييزها في السجل هو ما يجعل «لماذا اختفى قسم كامل؟» سؤالاً
+     * قابلاً للإجابة.
+     */
+    case CategoryCreated = 'category_created';
+    case CategoryUpdated = 'category_updated';
+    case AttributeCreated = 'attribute_created';
+    case AttributeUpdated = 'attribute_updated';
+    case AttributeOptionAdded = 'attribute_option_added';
+    case CategoryAttributesChanged = 'category_attributes_changed';
+
+    /**
      * ختم مراجعة جماعي على ما كان موجوداً قبل وجود اللوحة.
      *
      * حالة منفصلة لا ListingApproved مكرّرة: «اعتمد 160 إعلاناً في نفس
@@ -55,6 +71,12 @@ enum AdminAction: string
             self::UserBanned => 'حظر حساب',
             self::UserActivated => 'تنشيط حساب',
             self::UserRoleChanged => 'تغيير دور',
+            self::CategoryCreated => 'إنشاء تصنيف',
+            self::CategoryUpdated => 'تعديل تصنيف',
+            self::AttributeCreated => 'إنشاء خاصية',
+            self::AttributeUpdated => 'تعديل خاصية',
+            self::AttributeOptionAdded => 'إضافة خيار',
+            self::CategoryAttributesChanged => 'تغيير خصائص تصنيف',
             self::ListingsBaselineReviewed => 'خطّ أساس للمراجعة',
         };
     }

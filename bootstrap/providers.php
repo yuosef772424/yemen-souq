@@ -1,19 +1,15 @@
 <?php
 
-use App\Modules\Analytics\Providers\AnalyticsServiceProvider;
-use App\Modules\Catalog\Providers\CatalogServiceProvider;
-use App\Modules\Engagement\Providers\EngagementServiceProvider;
-use App\Modules\Search\Providers\SearchServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\ModuleServiceProvider;
+
+/*
+| موفّرات الوحدات غير مذكورة هنا بقصد: ModuleServiceProvider يمسح
+| app/Modules ويسجّل موفّر كل وحدة من مجلد Providers الخاص بها.
+| إضافة وحدة جديدة لا تمرّ بهذا الملف.
+*/
 
 return [
     AppServiceProvider::class,
     ModuleServiceProvider::class,
-    CatalogServiceProvider::class,
-    AnalyticsServiceProvider::class,
-    SearchServiceProvider::class,
-    EngagementServiceProvider::class,
-    App\Modules\Admin\Providers\AdminServiceProvider::class,
-    App\Modules\Merchant\Providers\MerchantServiceProvider::class,
 ];

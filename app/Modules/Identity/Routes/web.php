@@ -6,11 +6,12 @@ use App\Modules\Identity\Http\Controllers\RegisterController;
 use Illuminate\Support\Facades\Route;
 
 /*
-| مسارات وحدة الهوية — تُحمَّل بـrequire من routes/web.php.
+| مسارات وحدة الهوية — يكتشفها ModuleServiceProvider تلقائياً.
 |
-| لماذا لا موفّر خدمة: تسجيل موفّر يفرض تعديلاً يدوياً في
-| bootstrap/providers.php، والوحدة بهذا الشكل مكتفية بذاتها.
-| المقايضة: الربط في موفّر أكثر اصطلاحية.
+| ولا موفّر خدمة للوحدة لأنها لا تحتاج واحداً: سائق التوثيق يُحلّ في
+| PhoneVerificationService::sender() من config، لا من ربط في الحاوية.
+| الاعتراض القديم — أن الموفّر يفرض تعديلاً يدوياً في
+| bootstrap/providers.php — لم يعد قائماً بعد الاكتشاف التلقائي.
 */
 
 Route::middleware('guest')->group(function (): void {

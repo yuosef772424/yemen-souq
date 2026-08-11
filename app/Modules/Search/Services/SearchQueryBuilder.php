@@ -30,12 +30,12 @@ final class SearchQueryBuilder
         private readonly SearchTokenizer $tokenizer,
         private readonly QueryExpander $expander,
         private readonly ExchangeRateService $rates,
-    ) {
-    }
+        private readonly AttributeFilters $attributes,
+    ) {}
 
     /**
      * @return array{listings: LengthAwarePaginator, mode: string}
-     *         mode ∈ browse | exact | near | none
+     *                                                             mode ∈ browse | exact | near | none
      */
     public function search(SearchCriteria $criteria): array
     {
@@ -79,6 +79,11 @@ final class SearchQueryBuilder
         $this->applyText($query, $criteria, $mode);
         $this->applyPrice($query, $criteria);
         $this->applyFacets($query, $criteria);
+
+        // بعد بقية الفلاتر بقصد: كل شرط قبله يقصي صفوفاً، والاستعلام
+        // الفرعي يعمل على ما بقي لا على الجدول كاملاً
+        $this->attributes->apply($query, $criteria->attributes);
+
         $this->applySort($query, $criteria, $mode);
 
         return $query;
@@ -239,13 +244,13 @@ final class SearchQueryBuilder
 
             foreach ($group as $variant) {
                 $conditions[] = 'search_blob like ?';
-                $bindings[] = '%' . $variant . '%';
+                $bindings[] = '%'.$variant.'%';
             }
 
-            $cases[] = 'case when (' . implode(' or ', $conditions) . ') then 1 else 0 end';
+            $cases[] = 'case when ('.implode(' or ', $conditions).') then 1 else 0 end';
         }
 
-        $query->orderByRaw('(' . implode(' + ', $cases) . ') desc', $bindings);
+        $query->orderByRaw('('.implode(' + ', $cases).') desc', $bindings);
     }
 
     /**
@@ -278,7 +283,7 @@ final class SearchQueryBuilder
         if ($phrase !== '') {
             $query->orderByRaw(
                 'case when title_normalized like ? then 1 else 0 end desc',
-                ['%' . $phrase . '%']
+                ['%'.$phrase.'%']
             );
         }
 
@@ -289,7 +294,7 @@ final class SearchQueryBuilder
 
         $query->orderByRaw(
             "({$hits}) desc",
-            array_map(fn (string $token): string => '%' . $token . '%', $tokens)
+            array_map(fn (string $token): string => '%'.$token.'%', $tokens)
         );
     }
 

@@ -13,6 +13,7 @@ use App\Modules\Shared\Services\ArabicNormalizer;
 use App\Modules\Shared\Services\ExchangeRateService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class SearchController
@@ -50,7 +51,26 @@ class SearchController
             'governorates' => Location::active()->governorates()->get(),
             'rateMap' => $this->rates->currentRates(),
             'baseCurrency' => Currency::base(),
+            'categoryAttributes' => $this->categoryAttributes($criteria),
         ]);
+    }
+
+    /**
+     * خصائص التصنيف المختار — لبناء فلاتره.
+     *
+     * القابلة للفلترة وحدها: is_filterable في محور category_attributes
+     * موجود لهذا الغرض بالضبط، وعرض خاصية لا تُفلتر يَعِد بما لا يقع.
+     */
+    private function categoryAttributes(SearchCriteria $criteria): Collection
+    {
+        if ($criteria->categoryId === null) {
+            return collect();
+        }
+
+        $category = Category::with(['attributes' => fn ($query) => $query->wherePivot('is_filterable', true),
+            'attributes.options'])->find($criteria->categoryId);
+
+        return $category?->attributes ?? collect();
     }
 
     /**

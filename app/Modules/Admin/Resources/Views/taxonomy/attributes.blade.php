@@ -7,7 +7,8 @@
 @php
     $types = [
         'number' => 'رقم',
-        'option' => 'قائمة خيارات',
+        'option' => 'قائمة خيارات (واحد)',
+        'multi_option' => 'قائمة خيارات (متعدد)',
         'boolean' => 'نعم / لا',
         'string' => 'نص',
         'date' => 'تاريخ',
@@ -45,7 +46,7 @@
 
                     <div class="text-xs text-muted">
                         {{ $attribute->categories_count }} تصنيفاً
-                        @if ($attribute->data_type === 'option')
+                        @if (in_array($attribute->data_type, ['option', 'multi_option'], true))
                             · {{ $attribute->options->count() }} خياراً
                         @endif
                     </div>
@@ -82,7 +83,7 @@
                     </form>
 
                     {{-- الخيارات --}}
-                    @if ($attribute->data_type === 'option')
+                    @if (in_array($attribute->data_type, ['option', 'multi_option'], true))
                         <div class="space-y-2">
                             <h3 class="text-xs font-semibold">الخيارات</h3>
                             <ul class="flex flex-wrap gap-1.5">

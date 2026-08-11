@@ -89,6 +89,8 @@ class ListingAttributes
                 [$required ? 'required' : 'nullable'],
                 $this->typeRules($attribute)
             );
+
+            $rules = array_merge($rules, $this->itemRules($attribute));
         }
 
         return $rules;
@@ -110,8 +112,32 @@ class ListingAttributes
             // الخيار يُتحقَّق مقابل خيارات هذه الصفة وحدها لا كل الخيارات:
             // بلا القيد الثاني يمرّ «أوتوماتيك» قيمةً لسعة التخزين
             'option' => ['integer', 'exists:attribute_options,id,attribute_id,'.$attribute->id],
+            'multi_option' => ['array'],
             default => ['string', 'max:255'],
         };
+    }
+
+    /**
+     * قواعد عناصر الخيارات المتعددة.
+     *
+     * منفصلة عن typeRules لأن مفتاحها مختلف: القاعدة على
+     * attributes.<id> تصف المصفوفة، وهذه تصف كل عنصر فيها بـ
+     * attributes.<id>.* — ولارافل يحتاج المفتاحين معاً.
+     *
+     * @return array<string, list<string>>
+     */
+    private function itemRules(Attribute $attribute): array
+    {
+        if (! $attribute->isMulti()) {
+            return [];
+        }
+
+        return [
+            "attributes.{$attribute->id}.*" => [
+                'integer',
+                'exists:attribute_options,id,attribute_id,'.$attribute->id,
+            ],
+        ];
     }
 
     /**
@@ -124,12 +150,18 @@ class ListingAttributes
         $allowed = $this->forCategory($listing->category_id);
 
         $rows = [];
+        $multiRows = [];
 
         foreach ($allowed as $attribute) {
-            // الخيارات المتعددة مؤجَّلة: لا صفة من هذا النوع في البذرة،
-            // وكتابة مسار لا يسلكه شيء تصميمٌ بلا دليل. انظر سجلّ
-            // السكيمة المؤجَّلة.
+            // الخيارات المتعددة في جدول مستقل: المفتاح في جدول القيم
+            // مركّب من (listing, attribute) فلا يحمل إلا قيمة واحدة
+            // لكل خاصية
             if ($attribute->isMulti()) {
+                $multiRows = array_merge(
+                    $multiRows,
+                    $this->multiRows($listing, $attribute, $input[$attribute->id] ?? null)
+                );
+
                 continue;
             }
 
@@ -159,18 +191,62 @@ class ListingAttributes
             ];
         }
 
-        DB::transaction(function () use ($listing, $allowed, $rows): void {
+        $allowedIds = $allowed->pluck('id');
+
+        DB::transaction(function () use ($listing, $allowedIds, $rows, $multiRows): void {
             // الحذف ثم الإدراج لا upsert: التعديل قد يُفرغ صفة كانت
             // مملوءة، وupsert وحده يُبقي القيمة القديمة إلى الأبد
             DB::table('listing_attribute_values')
                 ->where('listing_id', $listing->id)
-                ->whereIn('attribute_id', $allowed->pluck('id'))
+                ->whereIn('attribute_id', $allowedIds)
+                ->delete();
+
+            DB::table('listing_multi_options')
+                ->where('listing_id', $listing->id)
+                ->whereIn('attribute_id', $allowedIds)
                 ->delete();
 
             if ($rows !== []) {
                 DB::table('listing_attribute_values')->insert($rows);
             }
+
+            if ($multiRows !== []) {
+                DB::table('listing_multi_options')->insert($multiRows);
+            }
         });
+    }
+
+    /**
+     * صفوف الخيارات المتعددة، مقصورةً على خيارات هذه الخاصية.
+     *
+     * التحقق يرفض الخيار الغريب قبل الوصول إلى هنا، والتصفية مكرَّرة
+     * بقصد: write يُستدعى من مسار الاستيراد لاحقاً بلا FormRequest،
+     * والمفتاح الأساسي المركّب يجعل خياراً مكرَّراً خطأً في قاعدة
+     * البيانات لا تجاهلاً.
+     *
+     * @return list<array<string, int>>
+     */
+    private function multiRows(Listing $listing, Attribute $attribute, mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $valid = $attribute->options->pluck('id')->all();
+
+        $ids = [];
+
+        foreach ($value as $item) {
+            if (is_numeric($item) && in_array((int) $item, $valid, true)) {
+                $ids[(int) $item] = true;
+            }
+        }
+
+        return array_map(static fn (int $id): array => [
+            'listing_id' => $listing->id,
+            'attribute_id' => $attribute->id,
+            'option_id' => $id,
+        ], array_keys($ids));
     }
 
     private function cast(Attribute $attribute, mixed $value): mixed
@@ -196,13 +272,32 @@ class ListingAttributes
             ->get()
             ->keyBy('attribute_id');
 
-        if ($values->isEmpty()) {
+        $multi = DB::table('listing_multi_options')
+            ->where('listing_id', $listing->id)
+            ->get()
+            ->groupBy('attribute_id');
+
+        if ($values->isEmpty() && $multi->isEmpty()) {
             return [];
         }
 
         $display = [];
 
         foreach ($this->forCategory($listing->category_id) as $attribute) {
+            if ($attribute->isMulti()) {
+                $chosen = $this->chosenOptions($attribute, $multi->get($attribute->id));
+
+                if ($chosen !== '') {
+                    $display[] = [
+                        'label' => $attribute->name_ar,
+                        'value' => $chosen,
+                        'unit' => null,
+                    ];
+                }
+
+                continue;
+            }
+
             $row = $values->get($attribute->id);
 
             if ($row === null) {
@@ -223,6 +318,28 @@ class ListingAttributes
         }
 
         return $display;
+    }
+
+    /**
+     * الخيارات المختارة بترتيب تعريفها لا بترتيب اختيار المعلن.
+     *
+     * ترتيب الإدخال يجعل إعلانين بنفس المواصفات يبدوان مختلفين، وهو
+     * فارق بلا معنى للقارئ.
+     *
+     * @param  Collection<int, object>|null  $rows
+     */
+    private function chosenOptions(Attribute $attribute, ?Collection $rows): string
+    {
+        if ($rows === null || $rows->isEmpty()) {
+            return '';
+        }
+
+        $ids = $rows->pluck('option_id')->all();
+
+        return $attribute->options
+            ->whereIn('id', $ids)
+            ->pluck('value_ar')
+            ->implode('، ');
     }
 
     private function format(Attribute $attribute, object $row): ?string

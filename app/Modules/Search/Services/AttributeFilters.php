@@ -80,10 +80,20 @@ final class AttributeFilters
         $matches = match ($attribute->data_type) {
             'number' => $filter->isRange(),
             'option', 'boolean' => $filter->isEquality(),
+            'multi_option' => $filter->isAnyOf(),
             default => false,
         };
 
         if (! $matches) {
+            return;
+        }
+
+        // الخيارات المتعددة تعيش في جدولها الخاص لا في جدول القيم:
+        // المفتاح هناك مركّب من (listing, attribute) فلا يحمل إلا قيمة
+        // واحدة لكل خاصية
+        if ($attribute->data_type === 'multi_option') {
+            $this->applyMultiOption($query, $attribute, $filter);
+
             return;
         }
 
@@ -98,6 +108,24 @@ final class AttributeFilters
                 'option' => $sub->where('listing_attribute_values.option_id', $filter->equals),
                 default => $sub->where('listing_attribute_values.value_boolean', $filter->equals === 1),
             };
+        });
+    }
+
+    /**
+     * EXISTS واحد بـIN لا EXISTS لكل خيار.
+     *
+     * الاثنان يعطيان نفس النتيجة لأن الدلالة «أيّ منها»، لكن EXISTS
+     * واحداً يمسح الفهرس مرة واحدة — والفهرس idx_lmo_filter مبنيّ على
+     * (attribute_id, option_id) بهذا الترتيب تحديداً.
+     */
+    private function applyMultiOption(Builder $query, Attribute $attribute, AttributeFilter $filter): void
+    {
+        $query->whereExists(function (QueryBuilder $sub) use ($attribute, $filter): void {
+            $sub->select(DB::raw(1))
+                ->from('listing_multi_options')
+                ->whereColumn('listing_multi_options.listing_id', 'listings.id')
+                ->where('listing_multi_options.attribute_id', $attribute->id)
+                ->whereIn('listing_multi_options.option_id', $filter->anyOf);
         });
     }
 

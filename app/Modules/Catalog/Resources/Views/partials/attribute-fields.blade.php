@@ -51,6 +51,20 @@
                             @endforeach
                         </select>
 
+                    @elseif ($attribute->data_type === 'multi_option')
+                        @php($chosen = array_map('strval', (array) old($field, $selected[$attribute->id] ?? [])))
+                        <div class="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+                            @foreach ($attribute->options as $option)
+                                <label class="flex items-center gap-2 text-sm">
+                                    <input type="checkbox" name="attributes[{{ $attribute->id }}][]"
+                                           value="{{ $option->id }}"
+                                           @checked(in_array((string) $option->id, $chosen, true))
+                                           class="size-4 rounded border-line text-brand focus:ring-brand">
+                                    <span>{{ $option->value_ar }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+
                     @elseif ($attribute->data_type === 'boolean')
                         <label class="mt-1.5 flex items-center gap-2 text-sm">
                             <input id="attr-{{ $categoryId }}-{{ $attribute->id }}"

@@ -3,8 +3,10 @@
 namespace App\Modules\Catalog\Http\Controllers;
 
 use App\Modules\Analytics\Events\EventName;
+use App\Modules\Analytics\Services\EventRecorder;
 use App\Modules\Catalog\Http\Requests\StoreListingRequest;
 use App\Modules\Catalog\Models\Listing;
+use App\Modules\Catalog\Services\ListingAttributes;
 use App\Modules\Catalog\Services\ListingImageService;
 use App\Modules\Identity\Support\DemoUser;
 use App\Modules\Shared\Models\Category;
@@ -14,12 +16,12 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
-use App\Modules\Analytics\Services\EventRecorder;
 class ListingCreateController
 {
     public function __construct(
         private readonly ListingImageService $images,
-         private readonly EventRecorder $events,
+        private readonly EventRecorder $events,
+        private readonly ListingAttributes $attributes,
     ) {}
 
     public function create(): View
@@ -29,6 +31,7 @@ class ListingCreateController
             'categories' => Category::active()->roots()->with('children')->get(),
             'governorates' => Location::active()->governorates()->with('children')->get(),
             'maxImages' => ListingImageService::MAX_PER_LISTING,
+            'attributesByCategory' => $this->attributes->groupedByCategory(),
         ]);
     }
 
@@ -37,14 +40,20 @@ class ListingCreateController
         // الإعلان في معاملة، والصور بعدها:
         // فشل صورة لا يجب أن يُلغي إعلاناً صحيحاً
         $listing = DB::transaction(function () use ($request): Listing {
-            return Listing::create([
-                ...$request->safe()->except('images'),
+            $listing = Listing::create([
+                ...$request->safe()->except('images', 'attributes'),
                 'user_id' => DemoUser::current()->id,
                 'sale_type' => 'direct',
                 'status' => 'active',
                 'published_at' => now(),
                 'expires_at' => now()->addDays(30),
             ]);
+
+            // داخل المعاملة مع الإعلان لا بعدها: إعلان سيارة بلا سنة صنع
+            // ولا ممشى إعلانٌ ناقص، بخلاف الصور التي يصحّ الإعلان بدونها
+            $this->attributes->write($listing, $request->validated('attributes', []));
+
+            return $listing;
         });
 
         $result = $this->images->attach($listing, $request->file('images', []));

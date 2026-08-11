@@ -20,7 +20,8 @@
     @endif
 
     <form method="POST" action="{{ route('listing.store') }}" enctype="multipart/form-data"
-          class="mt-6 space-y-5" x-data="listingForm({{ $maxImages }})">
+          class="mt-6 space-y-5"
+          x-data="listingForm({{ $maxImages }}, '{{ old('category_id') }}', {{ $attributesByCategory->keys()->toJson() }})">
         @csrf
 
         {{-- ═══ الأساسيات ═══ --}}
@@ -47,7 +48,7 @@
                     <label for="category_id" class="block text-sm font-medium">
                         التصنيف <span class="text-red-600">*</span>
                     </label>
-                    <select id="category_id" name="category_id" required
+                    <select id="category_id" name="category_id" required x-model="categoryId"
                             class="mt-1.5 w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                         <option value="">اختر…</option>
                         @foreach ($categories as $category)
@@ -93,6 +94,9 @@
                 </select>
             </div>
         </fieldset>
+
+        {{-- ═══ مواصفات التصنيف ═══ --}}
+        @include('catalog::partials.attribute-fields', ['attributesByCategory' => $attributesByCategory])
 
         {{-- ═══ السعر ═══ --}}
         <fieldset class="rounded-2xl border border-line bg-white p-5">

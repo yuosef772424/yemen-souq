@@ -2,6 +2,7 @@
 
 namespace App\Modules\Catalog\Http\Requests;
 
+use App\Modules\Catalog\Services\ListingAttributes;
 use App\Modules\Catalog\Services\ListingImageService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -16,6 +17,10 @@ class StoreListingRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // قواعد الخصائص مشتقّة من تعريفها في قاعدة البيانات لا مكتوبة
+            // هنا: إضافة صفة بالبذرة تصير محقَّقة بلا لمس هذا الملف
+            ...app(ListingAttributes::class)->rules($this->integerOrNull('category_id')),
+
             'title' => ['required', 'string', 'min:6', 'max:180'],
             'description' => ['nullable', 'string', 'max:5000'],
             'category_id' => ['required', 'integer', 'exists:categories,id'],
@@ -76,5 +81,17 @@ class StoreListingRequest extends FormRequest
         if (is_string($phone = $this->input('contact_phone'))) {
             $this->merge(['contact_phone' => preg_replace('/[\s\-]/', '', $phone)]);
         }
+    }
+
+    /**
+     * التصنيف قبل التحقق قد يكون فارغاً أو نصاً عبثياً — وrules() تحتاجه
+     * لبناء قواعد الخصائص. القيمة غير الصالحة تُعامَل كغياب تصنيف، فلا
+     * تُضاف قواعد خصائص، ويتكفّل شرط exists على category_id بالرفض.
+     */
+    private function integerOrNull(string $key): ?int
+    {
+        $value = $this->input($key);
+
+        return is_numeric($value) ? (int) $value : null;
     }
 }

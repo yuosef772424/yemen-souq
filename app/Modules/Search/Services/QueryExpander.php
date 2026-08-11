@@ -2,6 +2,7 @@
 
 namespace App\Modules\Search\Services;
 
+use App\Modules\Shared\Services\ArabicAffixStripper;
 use App\Modules\Shared\Services\LatinArabicTransliterator;
 
 /**
@@ -33,8 +34,8 @@ final class QueryExpander
     public function __construct(
         private readonly SynonymExpander $synonyms,
         private readonly LatinArabicTransliterator $transliterator,
-    ) {
-    }
+        private readonly ArabicAffixStripper $stripper,
+    ) {}
 
     /**
      * @param  array<int, string>  $tokens
@@ -52,6 +53,16 @@ final class QueryExpander
             foreach ($group as $word) {
                 $variants = [...$variants, ...$this->transliterator->variants($word)];
             }
+
+            /**
+             * التجريد على الجانبين لا جانب واحد.
+             *
+             * النص المجمَّع يحمل الصيغة المجرَّدة، فبحث «سياره» يجد
+             * «بالسياره». والعكس يحتاج هذا السطر: من كتب «بالسياره»
+             * يجب أن يجد إعلاناً عنوانه «سياره» — وتلك لا مجرَّدة لها
+             * في العمود لأنها مجرَّدة أصلاً.
+             */
+            $variants = [...$variants, ...$this->stripper->expand($group)];
 
             $groups[] = array_slice(
                 array_values(array_unique([...$group, ...$variants])),

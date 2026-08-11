@@ -96,6 +96,30 @@
                 </div>
             </dl>
 
+            {{--
+                المواصفات قبل الوصف بقصد: هي إجابات محدَّدة عن أسئلة
+                محدَّدة (كم الممشى؟ كم غرفة؟)، والوصف نصّ حرّ قد لا
+                يذكرها. من يقرأ إعلان سيارة يبحث عن السنة والممشى أولاً.
+            --}}
+            @if ($attributes !== [])
+                <div class="mt-5 border-t border-line pt-5">
+                    <h2 class="text-sm font-semibold">المواصفات</h2>
+                    <dl class="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                        @foreach ($attributes as $attribute)
+                            <div class="flex items-baseline justify-between gap-3 border-b border-line/60 pb-1.5">
+                                <dt class="text-sm text-muted">{{ $attribute['label'] }}</dt>
+                                <dd class="text-sm font-medium tabular-nums">
+                                    {{ $attribute['value'] }}
+                                    @if ($attribute['unit'])
+                                        <span class="text-xs font-normal text-muted">{{ $attribute['unit'] }}</span>
+                                    @endif
+                                </dd>
+                            </div>
+                        @endforeach
+                    </dl>
+                </div>
+            @endif
+
             @if ($listing->description)
                 <div class="mt-5 border-t border-line pt-5">
                     <h2 class="text-sm font-semibold">الوصف</h2>

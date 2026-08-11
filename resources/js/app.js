@@ -51,13 +51,29 @@ Alpine.data('priceFilter', (rates, initialCurrency, baseSymbol) => ({
  * رفع 40 ميجابايت ليكتشف بعدها أن الملف مرفوض. التحقق الملزم يبقى
  * في StoreListingRequest.
  */
-Alpine.data('listingForm', (maxImages) => ({
+Alpine.data('listingForm', (maxImages, categoryId = '', attributeCategories = []) => ({
     priceType: 'fixed',
     items: [],
     notice: '',
 
+    /**
+     * التصنيف المختار — تُبنى عليه حقول المواصفات.
+     *
+     * يبدأ من old() لا فارغاً: بعد رفض التحقق تُعاد الصفحة، وتصفير
+     * التصنيف هنا يُخفي الحقول التي كتب فيها المعلن قيماً — فتبدو
+     * أخطاؤها معلّقة على حقول غير مرئية.
+     */
+    categoryId: categoryId,
+
+    /** التصنيفات التي لها مواصفات — بغيرها لا يُعرض القسم أصلاً */
+    attributeCategories: attributeCategories.map(String),
+
     get needsPrice() {
         return this.priceType === 'fixed' || this.priceType === 'negotiable';
+    },
+
+    get hasAttributes() {
+        return this.attributeCategories.includes(String(this.categoryId));
     },
 
     preview(event) {

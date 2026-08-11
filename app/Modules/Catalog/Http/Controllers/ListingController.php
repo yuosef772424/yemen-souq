@@ -5,6 +5,7 @@ namespace App\Modules\Catalog\Http\Controllers;
 use App\Modules\Analytics\Events\EventName;
 use App\Modules\Analytics\Services\EventRecorder;
 use App\Modules\Catalog\Models\Listing;
+use App\Modules\Catalog\Services\ListingAttributes;
 use App\Modules\Engagement\Services\ConversationService;
 use App\Modules\Engagement\Services\FavoriteToggler;
 use App\Modules\Engagement\Services\QuestionService;
@@ -30,6 +31,7 @@ class ListingController
         private readonly FavoriteToggler $favorites,
         private readonly QuestionService $questions,
         private readonly ConversationService $conversations,
+        private readonly ListingAttributes $attributes,
     ) {}
 
     public function show(Request $request, Listing $listing): View
@@ -62,6 +64,7 @@ class ListingController
             'equivalents' => $this->equivalents($listing),
             'similar' => $this->similar($listing),
             'isOwner' => $isOwner,
+            'attributes' => $this->attributes->forDisplay($listing),
 
             // التفاعل: كل قرار عرض محسوب في الخادم لا في القالب —
             // زرّ يظهر ثم يُرفض بعد الضغط أسوأ من زرّ لا يظهر

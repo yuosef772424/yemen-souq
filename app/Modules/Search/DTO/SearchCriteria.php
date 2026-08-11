@@ -45,6 +45,9 @@ final readonly class SearchCriteria
      */
     public const MAX_ATTRIBUTE_FILTERS = 12;
 
+    /** سقف الخيارات داخل فلتر «أيّ منها» الواحد */
+    public const MAX_OPTIONS_PER_FILTER = 30;
+
     /** attr_key كما في عمود attributes.attr_key */
     private const ATTRIBUTE_KEY_PATTERN = '/^[a-z][a-z0-9_]{0,59}$/';
 
@@ -124,7 +127,7 @@ final readonly class SearchCriteria
             }
 
             $filter = is_array($value)
-                ? self::rangeFilter($key, $value)
+                ? self::arrayFilter($key, $value)
                 : self::equalityFilter($key, $value);
 
             if ($filter !== null) {
@@ -135,14 +138,24 @@ final readonly class SearchCriteria
         return $filters;
     }
 
-    /** @param array<mixed> $value */
-    private static function rangeFilter(string $key, array $value): ?AttributeFilter
+    /**
+     * الشكل المصفوفي يحمل معنيين، ويُفرَّق بينهما بالمفاتيح لا بالتخمين:
+     *
+     *   attr[mileage][min]=10&attr[mileage][max]=90   نطاق  — مفاتيح نصية
+     *   attr[features][]=3&attr[features][]=7         قائمة — مفاتيح رقمية
+     *
+     * والنطاق يُفحص أولاً: مصفوفة فيها min أو max نطاقٌ حتى لو حملت
+     * مفاتيح أخرى، فلا تنقلب إلى قائمة خيارات بمفتاح زائد في الرابط.
+     *
+     * @param  array<mixed>  $value
+     */
+    private static function arrayFilter(string $key, array $value): ?AttributeFilter
     {
         $min = self::number($value['min'] ?? null);
         $max = self::number($value['max'] ?? null);
 
         if ($min === null && $max === null) {
-            return null;
+            return self::anyOfFilter($key, $value);
         }
 
         // الحدّان المنقلبان يُعكسان لا يُرجعان صفر نتائج — نفس معالجة
@@ -152,6 +165,33 @@ final readonly class SearchCriteria
         }
 
         return new AttributeFilter($key, min: $min, max: $max);
+    }
+
+    /**
+     * قائمة معرّفات خيارات، مقصوصة بنفس منطق سقف الفلاتر.
+     *
+     * السقف هنا على عدد الخيارات في الفلتر الواحد: كلها تدخل في شرط
+     * IN واحد، لكن رابطاً بألف معرّف يُنتج استعلاماً بألف رابطة.
+     *
+     * @param  array<mixed>  $value
+     */
+    private static function anyOfFilter(string $key, array $value): ?AttributeFilter
+    {
+        $ids = [];
+
+        foreach ($value as $item) {
+            if (count($ids) >= self::MAX_OPTIONS_PER_FILTER) {
+                break;
+            }
+
+            if (is_scalar($item) && is_numeric($item) && (int) $item > 0) {
+                $ids[] = (int) $item;
+            }
+        }
+
+        $ids = array_values(array_unique($ids));
+
+        return $ids === [] ? null : new AttributeFilter($key, anyOf: $ids);
     }
 
     private static function equalityFilter(string $key, mixed $value): ?AttributeFilter

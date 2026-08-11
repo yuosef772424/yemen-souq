@@ -150,7 +150,7 @@ class SearchSynonymTest extends TestCase
     #[Test]
     public function a_word_without_synonyms_expands_to_itself_only(): void
     {
-        $this->assertSame([['هيونداي']], app(SynonymExpander::class)->expand(['هيونداي']));
+        $this->assertSame([['مسمار']], app(SynonymExpander::class)->expand(['مسمار']));
     }
 
     #[Test]

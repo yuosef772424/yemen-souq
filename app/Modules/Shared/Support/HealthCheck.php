@@ -352,10 +352,30 @@ final class HealthCheck
     /**
      * أوامر تصحيح منسية.
      * دليل التشخيص يذكرها كفحص قبل النشر — فلتكن آلية لا يدوية.
+     *
+     * ═══ تعبير نمطي بحدود كلمة، لا مطابقة نصّ فرعي ═══
+     *
+     * القاعدة القديمة كانت str_contains على 'ray(' و'd'.'d(' — فكانت
+     * تُبلّغ عن كل ملف فيه in_array( (لأنها تحتوي «ray(») وكل ملف فيه
+     * ->add( (لأنها تحتوي «dd(»). النتيجة: الفحص يشير إلى خمسة ملفات
+     * نظيفة في كل مرة.
+     *
+     * وهذا أسوأ من غياب الفحص. فحص يصرخ بلا سبب يُدرَّب عليه القارئ حتى
+     * يتجاهله — فحين يُترك dd( حقيقياً في متحكّم يمرّ بين الأسماء الخمسة
+     * المعتادة. الإنذار الكاذب لا يُضعف الفحص بل يُبطله.
+     *
+     * الحدّ الأيسر (?<![\w$]) هو كل الفرق: الحرف قبل الاسم لا يجوز أن
+     * يكون حرفاً — فـin_array( يُقصى وdd( يُلتقط. و«>» مسموح بقصد:
+     * ->dump( على استعلام أمرُ تصحيح حقيقي.
+     *
+     * وvar_dump قبل dump في البدائل ضرورة لا ترتيب: لو جاءت dump أولاً
+     * لطابقت داخل var_dump( فيُقصيها الشرطة السفلية قبلها، فيمرّ
+     * var_dump( بلا كشف.
      */
+    public const DEBUG_PATTERN = '/(?<![\w$])(?:var_dump|dump|dd|ray)\s*\(/';
+
     private function checkDebugLeftovers(): void
     {
-        $needles = ['d' . 'd(', 'dump(', 'var_' . 'dump(', 'ray('];
         $found = [];
 
         $iterator = new \RecursiveIteratorIterator(
@@ -369,19 +389,19 @@ final class HealthCheck
 
             $contents = (string) file_get_contents($file->getPathname());
 
-            foreach ($needles as $needle) {
-                if (str_contains($contents, $needle)) {
-                    $found[] = str_replace(app_path() . DIRECTORY_SEPARATOR, '', $file->getPathname());
-
-                    break;
-                }
+            if (preg_match(self::DEBUG_PATTERN, $contents) === 1) {
+                $found[] = str_replace(app_path() . DIRECTORY_SEPARATOR, '', $file->getPathname());
             }
         }
+
+        sort($found);
 
         $this->add(
             'أوامر تصحيح منسية',
             $found === [] ? 'ok' : 'warn',
-            $found === [] ? 'نظيف' : implode('، ', array_slice($found, 0, 5))
+            $found === []
+                ? 'نظيف'
+                : count($found) . ' ملفاً: ' . implode('، ', array_slice($found, 0, 5))
         );
     }
 

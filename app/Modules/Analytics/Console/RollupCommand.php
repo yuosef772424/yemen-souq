@@ -56,6 +56,7 @@ class RollupCommand extends Command
                 SUM(event_name = 'listing_viewed') as views,
                 COUNT(DISTINCT CASE WHEN event_name = 'listing_viewed' THEN anon_id END) as unique_viewers,
                 SUM(event_name = 'contact_revealed') as contacts,
+                SUM(event_name = 'favorite_added') as favorites,
                 SUM(event_name = 'search_impression') as search_impressions,
                 SUM(event_name = 'search_result_clicked') as search_clicks
             ")
@@ -73,8 +74,11 @@ class RollupCommand extends Command
                     'stat_date' => $date,
                     'views' => (int) $row->views,
                     'unique_viewers' => (int) $row->unique_viewers,
-                    // المفضلة غير مبنية بعد — صفر مقصود لا خطأ حساب
-                    'favorites' => 0,
+                    // صافي الإضافات في ذلك اليوم. الإزالة تُسجَّل بحدث
+                    // منفصل ولا تُخصم هنا: العمود يعني «كم حُفِظ اليوم»،
+                    // وخصم إزالة لحفظٍ من الأسبوع الماضي يُنتج رقماً
+                    // سالباً لا يمثّل شيئاً في تاريخه.
+                    'favorites' => (int) $row->favorites,
                     'contacts' => (int) $row->contacts,
                     'search_impressions' => (int) $row->search_impressions,
                     'search_clicks' => (int) $row->search_clicks,
@@ -85,7 +89,7 @@ class RollupCommand extends Command
                 DB::table('listing_daily_stats')->upsert(
                     $payload,
                     ['listing_id', 'stat_date'],
-                    ['views', 'unique_viewers', 'contacts', 'search_impressions', 'search_clicks']
+                    ['views', 'unique_viewers', 'favorites', 'contacts', 'search_impressions', 'search_clicks']
                 );
             }
         }
@@ -97,7 +101,7 @@ class RollupCommand extends Command
     {
         $searches = DB::table('user_events')
             ->selectRaw("
-                JSON_UNQUOTE(JSON_EXTRACT(payload, '$.q_normalized')) as q,
+                {$this->jsonText('q_normalized')} as q,
                 COUNT(*) as times_searched,
                 AVG(JSON_EXTRACT(payload, '$.results')) as avg_results,
                 SUM(JSON_EXTRACT(payload, '$.results') = 0) as zero_result_count,
@@ -105,19 +109,19 @@ class RollupCommand extends Command
             ")
             ->where('event_name', 'search_performed')
             ->whereDate('occurred_at', $date)
-            ->whereRaw("JSON_EXTRACT(payload, '$.q_normalized') IS NOT NULL")
+            ->whereRaw("{$this->jsonText('q_normalized')} IS NOT NULL")
             ->groupBy('q')
             ->get();
 
         $clicks = DB::table('user_events')
             ->selectRaw("
-                JSON_UNQUOTE(JSON_EXTRACT(payload, '$.q_normalized')) as q,
+                {$this->jsonText('q_normalized')} as q,
                 COUNT(*) as click_count,
                 AVG(JSON_EXTRACT(payload, '$.position')) as avg_click_position
             ")
             ->where('event_name', 'search_result_clicked')
             ->whereDate('occurred_at', $date)
-            ->whereRaw("JSON_EXTRACT(payload, '$.q_normalized') IS NOT NULL")
+            ->whereRaw("{$this->jsonText('q_normalized')} IS NOT NULL")
             ->groupBy('q')
             ->get()
             ->keyBy('q');
@@ -160,7 +164,7 @@ class RollupCommand extends Command
     {
         $applied = DB::table('user_events')
             ->selectRaw("
-                JSON_UNQUOTE(JSON_EXTRACT(payload, '$.key')) as filter_key,
+                {$this->jsonText('key')} as filter_key,
                 COUNT(*) as times_applied,
                 AVG(JSON_EXTRACT(payload, '$.results_after')) as avg_results_after,
                 SUM(JSON_EXTRACT(payload, '$.results_after') = 0) as zero_after_count
@@ -238,5 +242,42 @@ class RollupCommand extends Command
             'searches', 'searches_with_click', 'listing_views',
             'contacts_revealed', 'listings_created', 'forms_abandoned',
         ]);
+    }
+
+    /**
+     * استخراج نصّ من payload بصيغة يفهمها المحرّك.
+     *
+     * ═══ سبب وجود هذه الدالة ═══
+     *
+     * JSON_UNQUOTE دالة MySQL وحدها. الاختبارات تجري على SQLite في
+     * الذاكرة، فأي اختبار يشغّل analytics:rollup كان يسقط بـ
+     * «no such function: JSON_UNQUOTE» — أي أن التجميع كله كان غير قابل
+     * للاختبار، وهذا أخطر من الخطأ نفسه: الشيء الذي لا يُختبر هو الذي
+     * يُكسر بصمت.
+     *
+     * والفرق ليس في الاسم فقط: json_extract في SQLite يُرجع النص بلا
+     * علامات تنصيص أصلاً، فلا يحتاج فكّ تنصيص. وفي MySQL يُرجع قيمة JSON
+     * — أي "هاتف" بعلامتيها — فالمجموعة تُبنى على نصوص مقتبسة والنتيجة
+     * صفوف مكرّرة بمفاتيح غير قابلة للقراءة.
+     *
+     * البديل المرفوض: تشغيل الاختبارات على MySQL لتطابق الإنتاج. مرفوض
+     * لأنه يجعل كل مساهم يحتاج قاعدة بيانات لتشغيل الاختبارات، ويبطئها
+     * أضعافاً. الأصح أن يعمل الكود على المحرّكين ويُختبر على الأسرع.
+     */
+    private function jsonText(string $key): string
+    {
+        $path = "'$." . $key . "'";
+
+        return match ($this->driver()) {
+            'mysql', 'mariadb' => "JSON_UNQUOTE(JSON_EXTRACT(payload, {$path}))",
+            'pgsql' => "payload::jsonb ->> '" . $key . "'",
+            // sqlite وغيره: json_extract يُرجع نصاً صريحاً
+            default => "json_extract(payload, {$path})",
+        };
+    }
+
+    private function driver(): string
+    {
+        return DB::connection()->getDriverName();
     }
 }

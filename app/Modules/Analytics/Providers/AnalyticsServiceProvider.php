@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Providers;
 
+use App\Modules\Analytics\Console\ComputeAffinityCommand;
 use App\Modules\Analytics\Console\PruneEventsCommand;
 use App\Modules\Analytics\Console\RollupCommand;
 use App\Modules\Analytics\Services\EventRecorder;
@@ -28,6 +29,7 @@ class AnalyticsServiceProvider extends ServiceProvider
             $this->commands([
                 RollupCommand::class,
                 PruneEventsCommand::class,
+                ComputeAffinityCommand::class,
             ]);
         }
     }

@@ -110,3 +110,11 @@ Route::middleware('auth')->prefix('account')->name('account.')->group(function (
 */
 
 require base_path('app/Modules/Identity/Routes/web.php');
+// وحدة التحكم
+require __DIR__ . '/../app/Modules/Admin/Routes/web.php';
+
+// الإبلاغ عن إعلان
+require __DIR__ . '/../app/Modules/Engagement/Routes/reports.php';
+
+// وحدة التجار
+require __DIR__ . '/../app/Modules/Merchant/Routes/web.php';

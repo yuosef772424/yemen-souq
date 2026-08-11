@@ -3,6 +3,8 @@
 namespace App\Modules\Engagement\Services;
 
 use App\Models\User;
+use App\Modules\Analytics\Events\EventName;
+use App\Modules\Analytics\Services\EventRecorder;
 use App\Modules\Catalog\Models\Listing;
 use Illuminate\Support\Facades\DB;
 
@@ -24,9 +26,23 @@ use Illuminate\Support\Facades\DB;
  *
  * لأن بطاقة الإعلان في نتائج البحث تعرضه، وحساب COUNT لكل بطاقة في كل
  * صفحة نتائج يعني 24 استعلاماً إضافياً. العدّاد يُقرأ مع الصف نفسه.
+ *
+ * ═══ ولماذا يُسجَّل حدث أيضاً ═══
+ *
+ * العدّاد يقول «كم»، ولا يقول «متى». وعمود listing_daily_stats.favorites
+ * كان يُكتب صفراً ثابتاً لأن لا حدث يُسجَّل — فلوحة المعلن تعرض صفر
+ * حفظات لإعلان محفوظ فعلاً. الحدث هو الفرق بين رقم وتاريخ.
+ *
+ * والحدث يُسجَّل داخل المعاملة بعد نجاح الكتابة لا قبلها: EventRecorder
+ * يخزّن في الذاكرة ويكتب في نهاية الطلب، فتسجيل حدث لإدراج فشل يعني
+ * حدثاً بلا صف — وهو أسوأ من صف بلا حدث، لأن التجميع يعتمد عليه.
  */
 final class FavoriteToggler
 {
+    public function __construct(
+        private readonly EventRecorder $events,
+    ) {}
+
     /**
      * @return bool صار مفضّلاً (true) أو أُزيل (false)
      */
@@ -42,6 +58,8 @@ final class FavoriteToggler
             if ($inserted === 1) {
                 $this->adjust($listing, 1);
 
+                $this->events->record(EventName::FavoriteAdded, 'listing', $listing->id);
+
                 return true;
             }
 
@@ -52,6 +70,8 @@ final class FavoriteToggler
 
             if ($deleted === 1) {
                 $this->adjust($listing, -1);
+
+                $this->events->record(EventName::FavoriteRemoved, 'listing', $listing->id);
             }
 
             return false;

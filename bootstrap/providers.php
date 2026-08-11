@@ -14,4 +14,6 @@ return [
     AnalyticsServiceProvider::class,
     SearchServiceProvider::class,
     EngagementServiceProvider::class,
+    App\Modules\Admin\Providers\AdminServiceProvider::class,
+    App\Modules\Merchant\Providers\MerchantServiceProvider::class,
 ];

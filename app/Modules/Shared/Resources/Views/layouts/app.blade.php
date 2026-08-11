@@ -34,6 +34,12 @@
             <nav class="flex items-center gap-1 text-sm" aria-label="حسابي">
                 <a href="{{ route('account.listings') }}"
                    class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">إعلاناتي</a>
+                {{--
+                    «لوحتي» قبل «إعلاناتي» في الأهمية وبعدها في الترتيب بقصد:
+                    من يدخل يبحث عن إعلاناته أولاً، ويكتشف اللوحة ثانياً.
+                --}}
+                <a href="{{ route('merchant.dashboard') }}"
+                   class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">لوحتي</a>
                 <a href="{{ route('account.messages') }}"
                    class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">رسائلي</a>
                 <a href="{{ route('account.favorites') }}"

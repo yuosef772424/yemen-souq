@@ -225,4 +225,7 @@
     </section>
 @endif
 
+{{-- الإبلاغ آخر الصفحة — انظر تعليق القالب المضمَّن --}}
+@include('engagement::partials.report', ['listing' => $listing])
+
 @endsection

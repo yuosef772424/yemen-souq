@@ -89,6 +89,10 @@ Route::middleware('auth')->prefix('account')->name('account.')->group(function (
 
     Route::post('/listings/{listing}/renew', [AccountListingController::class, 'renew'])->name('listings.renew');
 
+    // زرّ واحد يبدّل الحالة — القرار من قاعدة البيانات لا من المتصفح
+    Route::post('/listings/{listing}/sold', [AccountListingController::class, 'toggleSold'])
+        ->name('listings.sold');
+
     Route::get('/listings/{listing}/stats', [AccountListingController::class, 'stats'])->name('listings.stats');
 
     Route::delete('/listings/{listing}/images/{image}', [AccountListingController::class, 'destroyImage'])

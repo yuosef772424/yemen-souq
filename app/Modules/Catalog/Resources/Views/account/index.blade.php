@@ -5,6 +5,7 @@
 @php
     $tabs = [
         'live' => 'المنشورة',
+        'sold' => 'المباعة',
         'expired' => 'المنتهية',
         'trashed' => 'المحذوفة',
         'all' => 'الكل',
@@ -130,6 +131,30 @@
                                    class="rounded-lg border border-line px-3 py-1.5 text-xs font-medium transition hover:bg-tint">
                                     المشاهدات
                                 </a>
+
+                                {{--
+                                    زرّ البيع يبدّل نصّه بحسب الحالة، والمسار واحد:
+                                    مساران يعنيان أن الواجهة تقرّر أيّهما تستدعي،
+                                    فتُرسل «بِع» على إعلان مباع إن تأخّر تحديث الصفحة.
+                                --}}
+                                @if ($listing->status === 'sold')
+                                    <form method="POST" action="{{ route('account.listings.sold', $listing) }}">
+                                        @csrf
+                                        <button type="submit"
+                                                class="rounded-lg border border-line px-3 py-1.5 text-xs font-medium transition hover:bg-tint">
+                                            إرجاع إلى العرض
+                                        </button>
+                                    </form>
+                                @elseif (in_array($listing->status, ['active', 'paused'], true))
+                                    <form method="POST" action="{{ route('account.listings.sold', $listing) }}"
+                                          onsubmit="return confirm('تعليم «{{ addslashes($listing->title) }}» مباعاً؟ سيختفي من نتائج البحث، ويمكنك إرجاعه من تبويب المباعة.')">
+                                        @csrf
+                                        <button type="submit"
+                                                class="rounded-lg border border-line px-3 py-1.5 text-xs font-medium transition hover:bg-tint">
+                                            تم البيع
+                                        </button>
+                                    </form>
+                                @endif
 
                                 {{-- الزر المُعطَّل يبقى مرئياً ويقول سبب تعطيله:
                                      زر يظهر ويختفي يجعل المعلن يظن أن الميزة غير موجودة --}}

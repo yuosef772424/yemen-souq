@@ -1,0 +1,65 @@
+# حارس آلي للحُزمة.
+#
+# 373 اختباراً كانت تعتمد على أن يتذكّر أحدهم تشغيلها. والحرّاس المعماريون
+# الستة تحديداً بلا معنى بلا هذا الملف: قاعدة «لا تُسجَّل وحدة يدوياً» تُكتشف
+# عند تشغيل الحُزمة لا عند كتابة الكود.
+#
+# لا خدمة قاعدة بيانات هنا بقصد: phpunit.xml يضبط sqlite في الذاكرة، فالحُزمة
+# مكتفية بذاتها. ولا خطوة npm: القوالب تستخدم @vite لكن الاختبارات تمرّ بلا
+# أصول مبنيّة — تحقّقنا من ذلك بتشغيلها على شجرة بلا public/build.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  # دفعة جديدة على نفس الفرع تُلغي سابقتها — لا فائدة من نتيجة كوميت متجاوَز
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: الاختبارات
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: تهيئة PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # 8.2 هو الحدّ الأدنى في composer.json — يُختبر الأدنى لا الأعلى،
+          # فالعطل الذي يظهر عليه وحده هو ما يفوت المطوّر
+          php-version: '8.2'
+          # gd لأجل intervention/image، وsqlite لأجل حُزمة الاختبارات
+          extensions: mbstring, dom, xml, curl, zip, gd, sqlite3, pdo_sqlite, bcmath
+          coverage: none
+
+      - name: تحديد مخبأ composer
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: استرجاع المخبأ
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php8.2-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.2-
+
+      - name: تثبيت الاعتماديات
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: تهيئة البيئة
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: تشغيل الحُزمة
+        run: php artisan test

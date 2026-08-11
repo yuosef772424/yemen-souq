@@ -1,5 +1,7 @@
 <?php
 
+use App\Modules\Admin\Http\Controllers\AttributeAdminController;
+use App\Modules\Admin\Http\Controllers\CategoryAdminController;
 use App\Modules\Admin\Http\Controllers\DashboardController;
 use App\Modules\Admin\Http\Controllers\ListingModerationController;
 use App\Modules\Admin\Http\Controllers\QuestionModerationController;
@@ -56,5 +58,22 @@ Route::middleware(['auth', EnsureIsStaff::class])
             Route::get('/users', [UserController::class, 'index'])->name('users');
             Route::post('/users/{user}/status', [UserController::class, 'status'])->name('users.status');
             Route::post('/users/{user}/role', [UserController::class, 'role'])->name('users.role');
+
+            // ─── بنية السوق: التصنيفات والخصائص ───
+            //
+            // للمدير لا للمشرف: المشرف يراجع محتوى، وهذه تُعيد تشكيل
+            // ما يُنشر ويُبحث فيه أصلاً. ولا مسار حذف — التعطيل هو
+            // الحذف هنا، والسبب في TaxonomyAdministrator.
+            Route::get('/categories', [CategoryAdminController::class, 'index'])->name('categories');
+            Route::post('/categories', [CategoryAdminController::class, 'store'])->name('categories.store');
+            Route::post('/categories/{category}', [CategoryAdminController::class, 'update'])->name('categories.update');
+
+            Route::get('/attributes', [AttributeAdminController::class, 'index'])->name('attributes');
+            Route::post('/attributes', [AttributeAdminController::class, 'store'])->name('attributes.store');
+            Route::post('/attributes/{attribute}', [AttributeAdminController::class, 'update'])->name('attributes.update');
+            Route::post('/attributes/{attribute}/options', [AttributeAdminController::class, 'storeOption'])
+                ->name('attributes.options');
+            Route::post('/categories/{category}/attributes', [AttributeAdminController::class, 'syncCategory'])
+                ->name('categories.attributes');
         });
     });

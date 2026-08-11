@@ -25,3 +25,6 @@ Thumbs.db
 
 # نسخ احتياطية من محاولات تعديل
 *.bak
+
+# إعدادات محلية لأدوات المطوّر — launch.json مشترك، وهذا ليس كذلك
+/.claude/settings.local.json

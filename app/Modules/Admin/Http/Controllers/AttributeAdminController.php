@@ -48,7 +48,7 @@ class AttributeAdminController
                 Rule::unique('attributes', 'attr_key'),
             ],
             'name_ar' => ['required', 'string', 'min:2', 'max:120'],
-            'data_type' => ['required', Rule::in(['string', 'number', 'boolean', 'option', 'date'])],
+            'data_type' => ['required', Rule::in(['string', 'number', 'boolean', 'option', 'multi_option', 'date'])],
             'unit' => ['nullable', 'string', 'max:20'],
             'min_value' => ['nullable', 'numeric'],
             'max_value' => ['nullable', 'numeric', 'gte:min_value'],
@@ -79,7 +79,7 @@ class AttributeAdminController
 
     public function storeOption(Request $request, Attribute $attribute): RedirectResponse
     {
-        if ($attribute->data_type !== 'option') {
+        if (! in_array($attribute->data_type, ['option', 'multi_option'], true)) {
             return back()->with('error', 'الخيارات تخصّ الخصائص من نوع «قائمة» فقط.');
         }
 

@@ -65,6 +65,9 @@ jobs:
         run: |
           cp .env.example .env
           php artisan key:generate
+          # HealthCheck يعدّ غياب public/storage عطلاً — والتطبيق السليم
+          # يملك الرابط. غيابه هنا نقصٌ في تهيئة CI لا خطأ في الفحص
+          php artisan storage:link
 
       - name: تشغيل الحُزمة
         run: php artisan test

@@ -20,7 +20,8 @@
 | [`architecture/modules.md`](architecture/modules.md) | عقد الوحدات: الاكتشاف التلقائي واتجاه الاعتماد وما يحرسه |
 | [`architecture/api.md`](architecture/api.md) | عقد الـAPI: المصادقة بالرمز، شكل الاستجابة، الحدود، نقاط النهاية |
 | [`architecture/sms-outbox.md`](architecture/sms-outbox.md) | طابور الرسائل: السحب الذرّي، الحراسة، عامل تيرمكس، وكيف تُحذف الوحدة |
-| [`architecture/deferred-schema.md`](architecture/deferred-schema.md) | تسعة جداول بلا كود: لماذا بقيت ومتى تُوصَل |
+| [`architecture/schema.md`](architecture/schema.md) | كل جدول وكل حقل: لماذا يوجد — وتحليل ما يُدمَج وما لا يُدمَج |
+| [`architecture/removed-schema.md`](architecture/removed-schema.md) | ما حُذف من السكيمة، ولماذا، وتعريفه كاملاً لإعادته |
 | [`data-import/amazon-dataset-compatibility.md`](data-import/amazon-dataset-compatibility.md) | فحص توافق داتاسيت Amazon مع السكيمة |
 
 ## القاعدة
@@ -31,4 +32,4 @@
 `architecture/` ويُشار إليه من السجلّ.
 
 والتوثيق الذي لا يحرسه شيء يتقادم. لذلك ما يمكن تحويله إلى اختبار يُحوَّل: سجلّ السكيمة
-المؤجَّلة يحرسه `DeferredSchemaTest`، وعقد الوحدات يحرسه `ModuleContractTest`.
+المحذوفة يحرسه `RemovedSchemaTest`، وعقد الوحدات يحرسه `ModuleContractTest`.

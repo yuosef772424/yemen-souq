@@ -185,6 +185,13 @@ Authorization: Bearer 3|abc…
 |---|---|
 | `GET /auth/me` · `POST /auth/logout` · `/logout-all` | |
 | `GET /auth/phone` · `POST /auth/phone/send` · `/verify` | |
+| `PUT /me/profile` | الاسم والاسم المعروض والنبذة والموقع والعملة والحساب التجاري |
+| `POST /me/avatar` · `DELETE /me/avatar` | الصورة. **POST لا PUT** — PHP لا يحلّل جسد multipart إلا على POST |
+| `PUT /me/password` | تشترط الكلمة الحالية — **وتُبطل رموز الأجهزة الأخرى** ويبقى رمز الطالب |
+| `PUT /me/phone` | تشترط كلمة المرور، وتُسقط التوثيق، وتُصدر رمزاً |
+| `GET`/`PUT /me/notification-preferences` | ما يصل، وعلى أي قناة |
+| `GET`/`PUT /me/privacy` | الانسحاب من القياس والتخصيص |
+| `DELETE /me` | إغلاق الحساب — تشترط كلمة المرور وتمحو كل الرموز |
 | `PUT /devices` · `DELETE /devices/{uuid}` | رمز الدفع |
 | `GET /me/listings` · `/{slug}` · `/{slug}/stats` | لوحة المعلن |
 | `POST /me/listings` · `POST /me/listings/{slug}` | **خلف بوابة الهاتف** |
@@ -196,6 +203,14 @@ Authorization: Bearer 3|abc…
 | `POST /listings/{slug}/conversation` | أول رسالة |
 | `GET /notifications` · `/unread-count` · `POST /{id}/read` · `/read-all` | |
 | `POST /listings/{slug}/reports` | |
+
+**`PUT /me/password` و`PUT /me/phone` على حدّ المصادقة (`api-auth`) لا حدّ الكتابة.**
+كلاهما يمسّ مفتاح الحساب: الأول يُبطل رموز الأجهزة الأخرى، والثاني يرسل رسالة بكلفة
+حقيقية ويُسقط التوثيق. والحدّ السخيّ يجعلهما هدفاً لمن سرق رمزاً.
+
+**و`PUT /me/notification-preferences` يشترط الشكل كاملاً.** الغياب يُقرأ إطفاءً لا
+«لا تغيير» — نفس دلالة النموذج في الويب، ولذلك يُرفض الجسد الفارغ بـ422 بدل أن يُطفئ
+كل شيء بلا قصد.
 
 **بوابة الهاتف على النشر والتعديل وحدهما** — بنفس قسمة الويب: البوابة تخصّ *إنشاء* محتوى
 معروض للسوق، أما السؤال والمفضلة والرسالة فسلوك مشترٍ وحظره يحرم المنصة من الطرف الذي
@@ -209,8 +224,6 @@ Authorization: Bearer 3|abc…
   تظهر مع أول تكامل خارجي — رمزٌ للقراءة وحدها لا يعرفه المستخدم اليوم.
 - **الأحداث تُسجَّل بسياق `platform: web`.** `EventRecorder::context` يكتبها ثابتةً، فلا
   تفرّق التحليلات بين طلب من متصفح وطلب من تطبيق. موضع الإصلاح في وحدة `Analytics`.
-- **لا تفضيلات إشعار عبر الـAPI.** `PreferenceResolver::save` جاهز بلا نقطة نهاية —
-  نفس نقص الويب.
 - **لا ترتيب بقيمة خاصية** ولا فلترة بها في نقطة `/listings` بما يتجاوز ما يدعمه
   `SearchCriteria` اليوم.
 - **`min_client`** غير مُنفَّذ في `/health`: حين يصير في التطبيق تغييرٌ لا يعمل بدونه،

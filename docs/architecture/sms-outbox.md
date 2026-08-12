@@ -284,10 +284,14 @@ SMS_INBOUND_PREFIX=SQ
 
 ### المجدول
 
+مضبوط في `SmsServiceProvider::schedule()` — داخل الوحدة لا في `routes/console.php`،
+لأن العقد يقول إن المجلد يعمل بمجرد وجوده ويُحذف بمجرد حذفه، وسطرُ جدولةٍ في ملفٍ
+مركزي ينقض الطرفين:
+
 ```php
-Schedule::command('sms:reap')->everyMinute();
-Schedule::command('sms:dispatch')->everyMinute();
-Schedule::command('sms:prune')->daily();
+Schedule::command('sms:dispatch')->everyMinute()->withoutOverlapping();
+Schedule::command('sms:reap')->everyMinute()->withoutOverlapping();
+Schedule::command('sms:prune')->dailyAt('03:10');
 ```
 
 `sms:dispatch` شبكة أمان لواتساب: `queue()` يدفع المهمّة فوراً، وهذا يكفي حين يعمل عامل

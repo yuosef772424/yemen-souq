@@ -5,6 +5,7 @@ namespace App\Modules\Catalog\Observers;
 use App\Modules\Catalog\Models\Listing;
 use App\Modules\Catalog\Models\ListingPriceHistory;
 use App\Modules\Catalog\Services\ListingBlobBuilder;
+use App\Modules\Catalog\Services\ListingFingerprint;
 use App\Modules\Shared\Services\ArabicNormalizer;
 use App\Modules\Shared\Services\ExchangeRateService;
 use Illuminate\Support\Str;
@@ -23,6 +24,7 @@ class ListingObserver
         private readonly ArabicNormalizer $normalizer,
         private readonly ExchangeRateService $rates,
         private readonly ListingBlobBuilder $blob,
+        private readonly ListingFingerprint $fingerprint,
     ) {
     }
 
@@ -32,6 +34,7 @@ class ListingObserver
         $this->fillSlug($listing);
         $this->fillBasePrice($listing);
         $this->fillSearchBlob($listing);
+        $this->fillFingerprint($listing);
     }
 
     /**
@@ -72,6 +75,19 @@ class ListingObserver
         }
 
         $listing->search_blob = $this->blob->for($listing);
+    }
+
+    /**
+     * بصمة المحتوى — تُعاد دائماً لا عند تغيّر مصادرها.
+     *
+     * الحساب تجزئةٌ على ثمانية حقول في الذاكرة، وشرطُ `isDirty` عليها
+     * يوفّر لا شيء ويفتح باب خطأ: مصدرٌ يُنسى من القائمة يعني بصمةً
+     * تصف إعلاناً لم يعد قائماً — وحارس التكرار يقرؤها فيرفض السليم
+     * أو يقبل النسخة.
+     */
+    private function fillFingerprint(Listing $listing): void
+    {
+        $listing->fingerprint = $this->fingerprint->for($listing);
     }
 
     private function fillSlug(Listing $listing): void

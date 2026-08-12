@@ -2,6 +2,7 @@
 
 namespace App\Modules\Catalog\Http\Requests;
 
+use App\Modules\Catalog\Http\Requests\Concerns\RejectsDuplicateListings;
 use App\Modules\Catalog\Services\ListingAttributes;
 use App\Modules\Catalog\Services\ListingImageService;
 use Illuminate\Foundation\Http\FormRequest;
@@ -9,6 +10,8 @@ use Illuminate\Validation\Rule;
 
 class StoreListingRequest extends FormRequest
 {
+    use RejectsDuplicateListings;
+
     public function authorize(): bool
     {
         return true;

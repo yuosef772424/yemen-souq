@@ -2,6 +2,7 @@
 
 namespace App\Modules\Catalog\Http\Requests;
 
+use App\Modules\Catalog\Http\Requests\Concerns\RejectsDuplicateListings;
 use App\Modules\Catalog\Services\ListingAttributes;
 use App\Modules\Catalog\Services\ListingImageService;
 use Illuminate\Foundation\Http\FormRequest;
@@ -21,6 +22,8 @@ use Illuminate\Validation\Rule;
  */
 class UpdateListingRequest extends FormRequest
 {
+    use RejectsDuplicateListings;
+
     /** الصلاحية تُفحص في المتحكّم بـGate — في مكان واحد لكل الأفعال السبعة */
     public function authorize(): bool
     {

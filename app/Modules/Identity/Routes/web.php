@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Identity\Http\Controllers\LoginController;
+use App\Modules\Identity\Http\Controllers\PasswordResetController;
 use App\Modules\Identity\Http\Controllers\PhoneVerificationController;
 use App\Modules\Identity\Http\Controllers\RegisterController;
 use Illuminate\Support\Facades\Route;
@@ -20,6 +21,19 @@ Route::middleware('guest')->group(function (): void {
 
     Route::get('/login', [LoginController::class, 'create'])->name('login');
     Route::post('/login', [LoginController::class, 'store']);
+
+    /*
+    | استعادة كلمة المرور — خطوتان.
+    |
+    | تحت guest بقصد: المسجَّل دخوله يغيّر كلمته من حسابه لا من هنا،
+    | ومسارُ استعادةٍ مفتوحٌ لمن هو داخل الحساب أصلاً سطحُ هجومٍ بلا
+    | حاجة — يكفي جهازٌ تُرك مفتوحاً.
+    */
+    Route::get('/forgot-password', [PasswordResetController::class, 'request'])->name('password.request');
+    Route::post('/forgot-password', [PasswordResetController::class, 'send']);
+
+    Route::get('/reset-password', [PasswordResetController::class, 'edit'])->name('password.reset');
+    Route::post('/reset-password', [PasswordResetController::class, 'update']);
 });
 
 Route::middleware('auth')->group(function (): void {

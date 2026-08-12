@@ -28,7 +28,14 @@
         </div>
 
         <div>
-            <label for="password" class="block text-sm font-medium">كلمة المرور</label>
+            <div class="flex items-baseline justify-between gap-2">
+                <label for="password" class="block text-sm font-medium">كلمة المرور</label>
+                {{-- بجانب الحقل لا في أسفل الصفحة: من نسي كلمته يكتشف ذلك
+                     عند هذا الحقل بالضبط، لا بعد أن يقرأ الصفحة كلها --}}
+                <a href="{{ route('password.request') }}" class="text-xs text-muted underline hover:text-ink">
+                    نسيتها؟
+                </a>
+            </div>
             <input id="password" name="password" type="password" required autocomplete="current-password"
                    class="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
         </div>

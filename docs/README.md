@@ -18,6 +18,8 @@
 | الملف | الموضوع |
 |---|---|
 | [`architecture/modules.md`](architecture/modules.md) | عقد الوحدات: الاكتشاف التلقائي واتجاه الاعتماد وما يحرسه |
+| [`architecture/api.md`](architecture/api.md) | عقد الـAPI: المصادقة بالرمز، شكل الاستجابة، الحدود، نقاط النهاية |
+| [`architecture/sms-outbox.md`](architecture/sms-outbox.md) | طابور الرسائل: السحب الذرّي، الحراسة، عامل تيرمكس، وكيف تُحذف الوحدة |
 | [`architecture/deferred-schema.md`](architecture/deferred-schema.md) | تسعة جداول بلا كود: لماذا بقيت ومتى تُوصَل |
 | [`data-import/amazon-dataset-compatibility.md`](data-import/amazon-dataset-compatibility.md) | فحص توافق داتاسيت Amazon مع السكيمة |
 

@@ -30,6 +30,14 @@
                 شارة «3 رسائل جديدة» في الترويسة تعني استعلام COUNT في كل
                 صفحة من الموقع لكل مستخدم مسجَّل — بما فيها صفحات لا علاقة
                 لها بالرسائل. الرقم يُعرض في صفحة الرسائل نفسها حيث يُقرأ.
+
+                والقاعدة نفسها تسري على الإشعارات، وهي أشدّ إغراءً بالمخالفة:
+                جرس بلا رقم يبدو ناقصاً. لكن الرقم هنا استعلامٌ ثانٍ على
+                app_notifications في كل صفحة — والمقابل رقمٌ يقرؤه المستخدم
+                مرة ثم يفتح الصفحة على أي حال.
+
+                موضع العدّاد الصحيح هو الدفع في التطبيق: هناك يصل الرقم مع
+                الإشعار بلا استعلام، وهناك يُقرأ والشاشة مقفلة.
             --}}
             <nav class="flex items-center gap-1 text-sm" aria-label="حسابي">
                 <a href="{{ route('account.listings') }}"
@@ -42,6 +50,8 @@
                    class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">لوحتي</a>
                 <a href="{{ route('account.messages') }}"
                    class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">رسائلي</a>
+                <a href="{{ route('account.notifications') }}"
+                   class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">الإشعارات</a>
                 <a href="{{ route('account.favorites') }}"
                    class="hidden rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink sm:block">المفضلة</a>
             </nav>

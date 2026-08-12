@@ -51,7 +51,13 @@ class ListingQuestionController
     {
         Gate::authorize('answer', $question);
 
-        $this->questions->answer($question, $request->string('answer')->value());
+        // المُجيب يُمرَّر صراحةً لا يُشتقّ من مالك الإعلان: Notifier يرفض
+        // إشعار الفاعل بفعله، وهو حارس لا يعمل إن لم يعرف من الفاعل
+        $this->questions->answer(
+            $question,
+            $request->string('answer')->value(),
+            $request->user(),
+        );
 
         return back()->with('status', 'نُشر جوابك.');
     }

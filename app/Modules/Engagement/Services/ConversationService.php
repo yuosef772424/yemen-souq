@@ -8,6 +8,8 @@ use App\Modules\Analytics\Services\EventRecorder;
 use App\Modules\Catalog\Models\Listing;
 use App\Modules\Engagement\Models\Conversation;
 use App\Modules\Engagement\Models\Message;
+use App\Modules\Notifications\Enums\NotificationType;
+use App\Modules\Notifications\Services\Notifier;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -35,11 +37,14 @@ use Illuminate\Support\Facades\DB;
  *    بلاه، ترتيب قائمة المحادثات يحتاج ربطاً بجدول messages وتجميعاً
  *    لكل صف. عمود واحد يُحدَّث مع كل رسالة أرخص بمراحل — وهو أيضاً ما
  *    يفهرسه المخطط أصلاً: index(buyer_id, last_message_at).
+ *
+ * 5. الإشعار لا يحمل نصّ الرسالة — انظر notify أدناه.
  */
 final class ConversationService
 {
     public function __construct(
         private readonly EventRecorder $events,
+        private readonly Notifier $notifier,
     ) {
     }
 
@@ -130,6 +135,55 @@ final class ConversationService
 
         $conversation->forceFill(['last_message_at' => $message->created_at])->save();
 
+        $this->notify($conversation, $sender);
+
         return $message;
+    }
+
+    /**
+     * إشعار الطرف الآخر — بلا نصّ الرسالة.
+     *
+     * ═══ لماذا لا يُنسخ النصّ ═══
+     *
+     * سببان، وكلاهما يكفي وحده:
+     *
+     * 1. **الشاشة المقفلة.** المساومة على السعر تصل إلى شاشة يراها من
+     *    يقف بجانب صاحب الجهاز. مساومةٌ خاصة تُقرأ من فوق الكتف ليست
+     *    تفصيلاً في سوق يتفاوض فيه الناس على مبالغ حقيقية.
+     *
+     * 2. **نسخة ثانية بعمر مختلف.** نصّ الرسالة يعيش في messages، ونسخه
+     *    إلى app_notifications يجعله في جدولين لكلٍّ سياسة حذف وقراءة
+     *    مختلفة. وnotifications:prune يحذف بعد تسعين يوماً بينما الرسالة
+     *    باقية — فيصير للنصّ الواحد مصيران.
+     *
+     * وعنوان الإعلان بديلٌ كافٍ: المستقبِل يعرف عن أيّ سلعة يُسأل، وهو
+     * ما يحتاجه ليقرّر أيفتح الآن أم لاحقاً. والنصّ على بُعد نقرة.
+     *
+     * counterpart قد تُرجع null لو حُذف الطرف الآخر — والحذف الناعم على
+     * users يجعلها حالة واقعية لا نظرية.
+     */
+    private function notify(Conversation $conversation, User $sender): void
+    {
+        $recipient = $conversation->counterpart($sender);
+
+        if ($recipient === null) {
+            return;
+        }
+
+        $listingTitle = $conversation->listing?->title ?? 'إعلان محذوف';
+
+        $this->notifier->send(
+            recipient: $recipient,
+            type: NotificationType::NewMessage,
+            title: 'رسالة جديدة من '.$sender->displayName(),
+            body: 'بخصوص: '.$listingTitle,
+            data: [
+                'entity_type' => 'conversation',
+                'entity_id' => $conversation->id,
+                'listing_id' => $conversation->listing_id,
+                'url' => route('account.messages.show', $conversation),
+            ],
+            actor: $sender,
+        );
     }
 }

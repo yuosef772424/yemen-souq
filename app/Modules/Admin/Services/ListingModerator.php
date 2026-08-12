@@ -5,6 +5,8 @@ namespace App\Modules\Admin\Services;
 use App\Models\User;
 use App\Modules\Admin\Enums\AdminAction;
 use App\Modules\Catalog\Models\Listing;
+use App\Modules\Notifications\Enums\NotificationType;
+use App\Modules\Notifications\Services\Notifier;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -25,11 +27,17 @@ use Illuminate\Support\Facades\DB;
  * يعيد نشره فوراً، فيكرّر العمل على الطرفين. والسبب المكتوب هو الفرق
  * بين إشراف وحجب.
  *
- * ═══ ما لا تفعله هذه الخدمة ═══
+ * ═══ الإشعار خارج الترانزاكشن ═══
  *
- * لا ترسل إشعاراً للمعلن. جداول الإشعارات موجودة ووحدة Notifications
- * فارغة من المنطق — فالمعلن لا يعرف بالرفض إلا إذا دخل لوحته. هذه
- * ثغرة معروفة لا سهو، وموضعها الصحيح وحدة الإشعارات لا هنا.
+ * الاعتماد والرفض يُشعران المعلن، والاستدعاء **بعد** إغلاق الترانزاكشن
+ * لا داخله. السبب أن الإشعار ليس جزءاً من الإجراء: عطلٌ في مساره يجب
+ * ألّا يتراجع عن رفضٍ اتخذه مشرف وكُتب في سجلّ المساءلة. الإجراء يقع
+ * أولاً ويُختم، ثم يُخبَر صاحبه.
+ *
+ * والإيقاف والحذف بلا إشعار بقصد: كلاهما إجراء يعقب بلاغاً أو مخالفة،
+ * ونصّه الصحيح ليس سطراً في قائمة إشعارات بل رسالة من الإدارة. إشعار
+ * «أُوقف إعلانك» بلا سبب مقروء يُنتج شكوى لا فهماً — والسبب يُكتب في
+ * admin_actions ولا يُعرض للمعلن اليوم.
  */
 final class ListingModerator
 {
@@ -38,6 +46,7 @@ final class ListingModerator
 
     public function __construct(
         private readonly AuditLogger $audit,
+        private readonly Notifier $notifier,
     ) {}
 
     /**
@@ -67,6 +76,12 @@ final class ListingModerator
                 'status_after' => $listing->status,
             ]);
         });
+
+        $this->tell($listing, NotificationType::ListingApproved,
+            'اعتُمد إعلانك: '.$listing->title,
+            'إعلانك ظاهر الآن في السوق.',
+            $admin,
+        );
     }
 
     public function reject(Listing $listing, User $admin, string $reason): void
@@ -85,6 +100,14 @@ final class ListingModerator
                 'status_before' => $before,
             ]);
         });
+
+        // السبب يُنسخ في جسد الإشعار لا يُترك في اللوحة: «رُفض إعلانك»
+        // وحدها تُنتج إعادة نشرٍ بنفس المخالفة، ورفضاً ثانياً بعدها
+        $this->tell($listing, NotificationType::ListingRejected,
+            'رُفض إعلانك: '.$listing->title,
+            'السبب: '.$reason,
+            $admin,
+        );
     }
 
     /**
@@ -171,5 +194,43 @@ final class ListingModerator
 
             $this->audit->log($admin, AdminAction::ListingRestored, $listing);
         });
+    }
+
+    /**
+     * إخبار المعلن بقرارٍ في إعلانه.
+     *
+     * المالك قد يكون null: users عليها حذف ناعم، وإعلانٌ لحساب محذوف
+     * يبقى في طابور المراجعة. المشرف يبتّ فيه ولا أحد يُشعَر.
+     *
+     * والوجهة تختلف بالقرار: المعتمَد يُفتح في السوق كما يراه الناس،
+     * والمرفوض لا صفحة عامة له — فمكانه لوحة صاحبه.
+     */
+    private function tell(
+        Listing $listing,
+        NotificationType $type,
+        string $title,
+        string $body,
+        User $admin,
+    ): void {
+        $owner = $listing->user;
+
+        if ($owner === null) {
+            return;
+        }
+
+        $this->notifier->send(
+            recipient: $owner,
+            type: $type,
+            title: $title,
+            body: $body,
+            data: [
+                'entity_type' => 'listing',
+                'entity_id' => $listing->id,
+                'url' => $type === NotificationType::ListingApproved
+                    ? route('listing.show', $listing)
+                    : route('account.listings'),
+            ],
+            actor: $admin,
+        );
     }
 }

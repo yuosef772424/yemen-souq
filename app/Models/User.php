@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Modules\Analytics\Models\TrackingPreference;
 use App\Modules\Catalog\Models\Listing;
+use App\Modules\Identity\Models\UserDevice;
 use App\Modules\Identity\Models\UserProfile;
+use App\Modules\Notifications\Models\AppNotification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -67,6 +69,20 @@ class User extends Authenticatable
     public function trackingPreferences(): HasOne
     {
         return $this->hasOne(TrackingPreference::class);
+    }
+
+    /**
+     * appNotifications لا notifications: سمة Notifiable تحجز الاسم الأخير
+     * لجدول لارافل الخاص بها، وإعادة تعريفه تكسر السمة بلا خطأ ظاهر.
+     */
+    public function appNotifications(): HasMany
+    {
+        return $this->hasMany(AppNotification::class);
+    }
+
+    public function devices(): HasMany
+    {
+        return $this->hasMany(UserDevice::class);
     }
 
     // ---- الهوية ----

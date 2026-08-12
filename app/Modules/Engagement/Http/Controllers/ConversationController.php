@@ -29,6 +29,8 @@ class ConversationController
 
         $conversations = Conversation::query()
             ->forUser($user)
+            // العدّ في نفس الاستعلام لا استعلاماً لكل صفّ في القالب
+            ->withUnreadCountFor($user)
             ->with(['listing.images', 'buyer', 'seller'])
             ->orderByDesc('last_message_at')
             ->paginate(15);

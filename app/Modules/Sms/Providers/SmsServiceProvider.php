@@ -19,6 +19,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 use RuntimeException;
@@ -108,7 +109,31 @@ class SmsServiceProvider extends ServiceProvider
                 SmsStatusCommand::class,
                 SmsTokenCommand::class,
             ]);
+
+            $this->schedule();
         }
+    }
+
+    /**
+     * الجدولة داخل الوحدة لا في `routes/console.php`.
+     *
+     * عقد الوحدات يقول: مجلدٌ يعمل بمجرد وجوده ويُحذف بمجرد حذفه. وسطرُ
+     * جدولةٍ في ملفٍ مركزي ينقض الطرفين — يحتاج تعديلاً خارج الوحدة عند
+     * الإضافة، ويبقى بعد الحذف يستدعي أمراً ذهب.
+     *
+     * وكانت الأوامر الثلاثة تصف جدولتها في تعليقاتها ولا يجدولها شيء:
+     * `sms:dispatch` غير مجدول يعني أن واتساب لا يتراجع أبداً حين تسقط
+     * المهمّة الفورية، و`sms:reap` غير مجدول يعني أن سحبةً ماتت تحبس
+     * رسالتها إلى الأبد — والاثنان يظهران كـ«الرمز لا يصل» بلا سبب.
+     *
+     * `withoutOverlapping` على ما يجري كل دقيقة: تشغيلةٌ تأخرت لا يجوز
+     * أن تلتقي بالتالية على نفس الصفوف.
+     */
+    private function schedule(): void
+    {
+        Schedule::command('sms:dispatch')->everyMinute()->withoutOverlapping();
+        Schedule::command('sms:reap')->everyMinute()->withoutOverlapping();
+        Schedule::command('sms:prune')->dailyAt('03:10');
     }
 
     /**

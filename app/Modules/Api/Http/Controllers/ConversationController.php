@@ -54,6 +54,8 @@ class ConversationController
     {
         $conversations = Conversation::query()
             ->forUser($request->user())
+            // العدّ في نفس الاستعلام — انظر Conversation::scopeWithUnreadCountFor
+            ->withUnreadCountFor($request->user())
             ->with(['listing.images', 'listing.currency', 'listing.category', 'listing.location', 'buyer', 'seller'])
             ->orderByDesc('last_message_at')
             ->paginate(Pagination::perPage($request));

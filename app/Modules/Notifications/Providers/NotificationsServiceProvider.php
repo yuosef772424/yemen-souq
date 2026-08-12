@@ -7,6 +7,7 @@ use App\Modules\Notifications\Contracts\PushSender;
 use App\Modules\Notifications\Senders\FcmPushSender;
 use App\Modules\Notifications\Senders\LogPushSender;
 use App\Modules\Notifications\Services\PreferenceResolver;
+use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 
@@ -51,6 +52,9 @@ class NotificationsServiceProvider extends ServiceProvider
             $this->commands([
                 PruneNotificationsCommand::class,
             ]);
+
+            // الاحتفاظ تسعون يوماً وعدٌ معلَن — وأمرٌ غير مجدول لا ينفّذه
+            Schedule::command('notifications:prune')->dailyAt('03:20');
         }
     }
 }

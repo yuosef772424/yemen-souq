@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 /**
  * محادثة واحدة لكل (إعلان، مشترٍ) — والقيد في المخطط لا في الكود:
@@ -81,8 +82,33 @@ class Conversation extends Model
         return $user->id === $this->buyer_id ? $this->seller : $this->buyer;
     }
 
+    /**
+     * عدّ غير المقروء لكل الخيوط في استعلام واحد.
+     *
+     * كان `unreadCountFor` يُنادى داخل حلقة العرض — خمسة عشر استعلاماً
+     * في صفحة الرسائل، وقد وُصف في `ConversationResource` كثمنٍ مقبول
+     * لأن الصفحة مرقَّمة. وهو مقبول ما دامت خمسة عشر، ولا سبب لدفعه:
+     * `withCount` بشرطٍ على العلاقة يُنجزه في نفس استعلام القائمة.
+     *
+     * ولماذا يُنتقى معه معرّف المستخدم: العدد **يخصّ قارئاً بعينه**،
+     * وقيمةٌ محسوبة لأحمد تُقرأ لخالد كذبٌ صامت. الصفّ يحمل لمن حُسب،
+     * و`unreadCountFor` تتجاهله لغيره وتسأل القاعدة.
+     */
+    public function scopeWithUnreadCountFor(Builder $query, User $user): Builder
+    {
+        return $query
+            ->withCount(['messages as unread_count' => function (Builder $inner) use ($user): void {
+                $inner->where('sender_id', '!=', $user->id)->whereNull('read_at');
+            }])
+            ->addSelect(DB::raw($user->id.' as unread_count_for'));
+    }
+
     public function unreadCountFor(User $user): int
     {
+        if ($this->unread_count !== null && (int) $this->unread_count_for === $user->id) {
+            return (int) $this->unread_count;
+        }
+
         return $this->messages()
             ->where('sender_id', '!=', $user->id)
             ->whereNull('read_at')

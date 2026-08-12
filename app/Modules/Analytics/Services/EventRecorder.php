@@ -33,6 +33,9 @@ final class EventRecorder
     /** @var array<int, array<string, mixed>> */
     private array $buffer = [];
 
+    /** جواب «هل يسمح هذا المستخدم بالتتبّع» — يُقرأ مرة واحدة في الطلب */
+    private ?bool $allowed = null;
+
     public function __construct(
         private readonly Request $request,
     ) {}
@@ -126,6 +129,18 @@ final class EventRecorder
         ];
     }
 
+    /**
+     * احترام انسحاب المستخدم من التتبّع — بقراءة واحدة لكل طلب.
+     *
+     * كان السطر `$user->trackingPreferences?->allow_analytics` بلا خبيئة،
+     * و«تحميل كسول» لا يعني «مرّة واحدة» حين يتبدّل النموذج: صفحة بحث
+     * تولّد خمسة وعشرين حدثاً، وكلٌّ منها يقرأ `$this->request->user()`
+     * — وهي قد تُرجع نسخةً غير محمَّلة العلاقة فيقع استعلامٌ لكل حدث.
+     *
+     * والخبيئة على مستوى الطلب لا الذاكرة الدائمة: الخدمة singleton
+     * داخل الطلب وتموت بانتهائه، فتغيير المستخدم لتفضيله يُقرأ في الطلب
+     * التالي مباشرةً — وهو ما يجعل زرّ «أوقف التتبّع» يعمل فوراً.
+     */
     private function allowed(): bool
     {
         $user = $this->request->user();
@@ -134,7 +149,6 @@ final class EventRecorder
             return true;
         }
 
-        // احترام انسحاب المستخدم من التتبع
-        return (bool) ($user->trackingPreferences?->allow_analytics ?? true);
+        return $this->allowed ??= (bool) ($user->trackingPreferences?->allow_analytics ?? true);
     }
 }

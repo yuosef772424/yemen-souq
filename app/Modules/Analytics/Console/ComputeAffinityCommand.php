@@ -31,6 +31,12 @@ use Illuminate\Support\Facades\DB;
  * يقلّص السجل الخام إلى صفوف قليلة — والتلاشي يُحسب على تلك الصفوف.
  * كلفة الحساب في PHP لا شيء بعد التجميع، والنتيجة واحدة على أي محرك.
  *
+ * ═══ ومن أوقف التخصيص لا يُحسب له شيء ═══
+ *
+ * `user_tracking_preferences.allow_personalization` تُقرأ هنا لا عند
+ * العرض: الحساب هو ما ينتج الملف السلوكي، وإخفاؤه عند العرض وحده يعني
+ * أننا نبنيه ثم نمتنع عن استعماله — وهو ليس ما وعدنا به.
+ *
  * ═══ وما لا يفعله ═══
  *
  * لا يورّث الدرجة إلى التصنيف الأب. مشاهدة «آيفون» لا تُقوّي «إلكترونيات»
@@ -64,6 +70,19 @@ class ComputeAffinityCommand extends Command
 
         $rows = DB::table('user_events')
             ->join('listings', 'listings.id', '=', 'user_events.entity_id')
+            /*
+             * من أوقف التخصيص يخرج من الحساب.
+             *
+             * leftJoin لا whereNotIn بقائمة معرّفات: الأغلبية بلا صفّ
+             * تفضيلات (الافتراض مسموح)، والقائمة تكبر بلا سقف بينما
+             * الربط يبقى استعلاماً واحداً. و`whereNull` هي ما تُبقي
+             * الأغلبية داخل الحساب.
+             */
+            ->leftJoin('user_tracking_preferences as prefs', 'prefs.user_id', '=', 'user_events.user_id')
+            ->where(function ($query): void {
+                $query->whereNull('prefs.allow_personalization')
+                    ->orWhere('prefs.allow_personalization', true);
+            })
             ->whereNotNull('user_events.user_id')
             ->where('user_events.entity_type', 'listing')
             ->whereIn('user_events.event_name', array_keys(self::WEIGHTS))

@@ -70,12 +70,10 @@ class SearchCriteriaGuardsTest extends TestCase
     }
 
     #[Test]
-    public function unknown_condition_and_sale_type_are_dropped(): void
+    public function an_unknown_condition_is_dropped(): void
     {
-        $criteria = $this->criteria('condition=broken&type=barter');
-
-        $this->assertNull($criteria->condition);
-        $this->assertNull($criteria->saleType);
+        $this->assertNull($this->criteria('condition=broken')->condition);
+        $this->assertSame('used', $this->criteria('condition=used')->condition);
     }
 
     private function criteria(string $queryString): SearchCriteria

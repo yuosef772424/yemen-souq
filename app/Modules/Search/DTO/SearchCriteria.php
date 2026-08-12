@@ -24,8 +24,6 @@ final readonly class SearchCriteria
 
     public const CONDITIONS = ['new', 'like_new', 'used', 'for_parts'];
 
-    public const SALE_TYPES = ['direct', 'auction'];
-
     /**
      * سقف طول الاستعلام.
      *
@@ -61,7 +59,6 @@ final readonly class SearchCriteria
         public string $priceCurrency = 'YER',
         public ?string $listingCurrency = null,
         public ?string $condition = null,
-        public ?string $saleType = null,
         public bool $withImageOnly = false,
         public string $sort = 'newest',
         public int $perPage = 24,
@@ -85,7 +82,6 @@ final readonly class SearchCriteria
                 ?? Currency::baseCode(),
             listingCurrency: self::pick(self::upper($request, 'listing_currency'), $currencies),
             condition: self::pick(self::scalar($request, 'condition'), self::CONDITIONS),
-            saleType: self::pick(self::scalar($request, 'type'), self::SALE_TYPES),
             withImageOnly: self::flag($request, 'with_image'),
             sort: self::pick(self::scalar($request, 'sort'), self::SORTS) ?? 'newest',
             perPage: min(max(self::id($request, 'per_page') ?? 24, 6), 60),
@@ -322,7 +318,6 @@ final readonly class SearchCriteria
             'price' => $this->hasPriceFilter(),
             'currency' => $this->listingCurrency !== null,
             'condition' => $this->condition !== null,
-            'sale_type' => $this->saleType !== null,
             'with_image' => $this->withImageOnly,
             'attributes' => $this->attributes !== [],
         ]));

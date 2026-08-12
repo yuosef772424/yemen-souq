@@ -69,7 +69,6 @@ trait SeedsCatalog
             'price_amount' => 5000,
             'currency_code' => 'SAR',
             'price_type' => 'fixed',
-            'sale_type' => 'direct',
             'status' => 'active',
             'contact_phone' => '+967771234567',
             'published_at' => now(),

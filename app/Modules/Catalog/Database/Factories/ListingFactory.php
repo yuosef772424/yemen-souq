@@ -99,7 +99,6 @@ class ListingFactory extends Factory
             'currency_code' => $currency,
             'price_type' => $this->faker->randomElement(['fixed', 'fixed', 'fixed', 'negotiable']),
             'is_negotiable' => $this->faker->boolean(40),
-            'sale_type' => 'direct',
             'condition_type' => $this->faker->randomElement(['new', 'like_new', 'used', 'used']),
             'status' => 'active',
             'contact_phone' => '+9677'.$this->faker->numerify('########'),

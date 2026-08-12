@@ -80,7 +80,6 @@ class CategoryAdminController
             'icon' => ['nullable', 'string', 'max:60'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
             'is_active' => ['nullable', 'boolean'],
-            'allows_auction' => ['nullable', 'boolean'],
         ], [
             'slug.regex' => 'المُعرِّف يقبل الحروف اللاتينية الصغيرة والأرقام والشرطة فقط.',
             'slug.unique' => 'هذا المُعرِّف مستخدم في تصنيف آخر.',
@@ -88,7 +87,6 @@ class CategoryAdminController
         ]);
 
         $data['is_active'] = $request->boolean('is_active');
-        $data['allows_auction'] = $request->boolean('allows_auction');
         $data['sort_order'] = $data['sort_order'] ?? 0;
         $data['path'] = $category?->path ?? '';
 

@@ -30,7 +30,8 @@ return new class extends Migration
             $table->boolean('is_negotiable')->default(false);
             $table->enum('price_type', ['fixed', 'negotiable', 'on_request', 'free'])->default('fixed');
 
-            $table->enum('sale_type', ['direct', 'auction'])->default('direct');
+            // لا `sale_type`: قيمتاه direct/auction، والمزاد محذوف —
+            // فالعمود سؤالٌ بجواب واحد. انظر removed-schema.md
             $table->enum('condition_type', ['new', 'like_new', 'used', 'for_parts'])->nullable();
             $table->enum('status', ['draft', 'pending', 'active', 'paused', 'sold', 'expired', 'rejected'])
                 ->default('draft');

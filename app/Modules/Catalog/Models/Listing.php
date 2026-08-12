@@ -34,7 +34,7 @@ class Listing extends Model
         'user_id', 'category_id', 'location_id',
         'title', 'slug', 'description',
         'price_amount', 'currency_code', 'price_type', 'is_negotiable',
-        'sale_type', 'condition_type', 'status',
+        'condition_type', 'status',
         'contact_phone', 'hide_phone',
         'is_featured', 'featured_until', 'published_at', 'expires_at',
     ];

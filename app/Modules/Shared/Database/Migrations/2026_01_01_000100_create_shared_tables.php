@@ -65,7 +65,8 @@ return new class extends Migration
             $table->string('icon', 60)->nullable();
             $table->string('path', 255)->comment('مثل 1/14/57');
             $table->unsignedTinyInteger('depth')->default(0);
-            $table->boolean('allows_auction')->default(true);
+            // لا `allows_auction`: مفتاحٌ يفتح ميزةً محذوفة — انظر
+            // docs/architecture/removed-schema.md
             $table->boolean('is_active')->default(true);
             $table->smallInteger('sort_order')->default(0);
             $table->timestamps();

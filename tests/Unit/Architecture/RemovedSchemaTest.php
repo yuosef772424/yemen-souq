@@ -6,64 +6,76 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * السكيمة لا تَعِد بما لا ينفّذه الكود — أو تُعلن التأجيل صراحةً.
+ * السكيمة لا تَعِد بما لا ينفّذه الكود.
  *
- * تسعة جداول في المشروع لا يشير إليها كود التطبيق. المشكلة ليست وجودها
- * بل صمتها: جدول فارغ لا يميّزه شيء عن جدول معطَّل، فيُقرأ auctions في
- * السكيمة ويُفترض أن المزادات تعمل.
+ * القاعدة السابقة كانت أضعف: «الجدول الفارغ يبقى ويُعلَن تأجيله في
+ * سجلّ». وسقطت لأن الوعد الكاذب لا يقع في ملف التوثيق بل في القاعدة
+ * نفسها — من يفتح المخطط يقرأ `auctions` ولا يقرأ `docs/`.
  *
- * السجلّ في docs/architecture/deferred-schema.md هو مصدر الحقيقة، وهذا
- * الاختبار يقارنه بالواقع في اتجاهين — فلا يتقادم.
+ * فصارت القاعدة: **كل جدول يشير إليه كود التطبيق، وما لا يشير إليه شيء
+ * يُحذف ويُحفَظ تعريفه** في docs/architecture/removed-schema.md. وهذا
+ * الاختبار يحرس الطرفين: لا جدولَ بلا كود، ولا سجلَّ متقادم.
  */
-class DeferredSchemaTest extends TestCase
+class RemovedSchemaTest extends TestCase
 {
     private const ROOT = __DIR__.'/../../..';
 
+    private const RECORD = '/docs/architecture/removed-schema.md';
+
     /** جداول لارافل نفسه — خارج الحساب */
     private const FRAMEWORK_TABLES = [
-        'users', 'password_reset_tokens', 'sessions',
+        'users', 'sessions',
         'cache', 'cache_locks', 'jobs', 'job_batches', 'failed_jobs',
     ];
 
     #[Test]
-    public function every_unwired_table_is_declared_in_the_register(): void
+    public function every_table_a_migration_creates_is_referenced_by_application_code(): void
     {
-        $undeclared = array_values(array_diff($this->unwiredTables(), $this->registeredTables()));
+        $unwired = $this->unwiredTables();
 
-        $this->assertSame([], $undeclared, implode("\n", array_merge(
-            ['جداول لا يشير إليها كود ولا يذكرها docs/architecture/deferred-schema.md:'],
-            array_map(static fn (string $t): string => "  - {$t}", $undeclared),
-            ['', 'إمّا تُوصَل بكود، أو تُضاف إلى السجلّ بسبب صريح وموعد.']
+        $this->assertSame([], $unwired, implode("\n", array_merge(
+            ['جداول تُنشئها هجرة ولا يشير إليها سطر واحد في app/:'],
+            array_map(static fn (string $t): string => "  - {$t}", $unwired),
+            [
+                '',
+                'إمّا تُوصَل بكود، أو تُحذف ويُحفَظ تعريفها في',
+                'docs/architecture/removed-schema.md لتُعاد يوم تُبنى ميزتها.',
+            ]
         )));
     }
 
     /**
-     * الاتجاه الذي يمنع تقادم السجلّ: جدول صار موصولاً ولم يُشطب.
+     * الاتجاه الذي يمنع تقادم السجلّ: جدول محذوف عادت هجرةٌ تُنشئه.
      */
     #[Test]
-    public function the_register_lists_no_table_that_is_already_wired(): void
+    public function the_record_lists_no_table_that_a_migration_creates_again(): void
     {
-        $stale = array_values(array_intersect($this->registeredTables(), $this->wiredTables()));
+        $resurrected = array_values(array_intersect($this->recordedTables(), $this->allTables()));
 
-        $this->assertSame([], $stale, implode("\n", array_merge(
-            ['جداول مذكورة كمؤجَّلة وقد صار لها كود فعلاً:'],
-            array_map(static fn (string $t): string => "  - {$t}", $stale),
-            ['', 'تُشطب من docs/architecture/deferred-schema.md — الميزة وُصلت.']
+        $this->assertSame([], $resurrected, implode("\n", array_merge(
+            ['جداول مذكورة كمحذوفة وقد أنشأتها هجرة من جديد:'],
+            array_map(static fn (string $t): string => "  - {$t}", $resurrected),
+            ['', 'تُشطب من docs/architecture/removed-schema.md — الميزة عادت.']
         )));
     }
 
     /**
      * أسماء الجداول في العمود الأول من جدول السجلّ، بين علامتَي `.
      *
+     * والأعمدة المحذوفة (`listings.sale_type`) لا تُلتقط بقصد: النقطة
+     * خارج الصنف، فيقتصر الحصاد على أسماء الجداول.
+     *
      * @return list<string>
      */
-    private function registeredTables(): array
+    private function recordedTables(): array
     {
-        $doc = file_get_contents(self::ROOT.'/docs/architecture/deferred-schema.md');
+        $record = @file_get_contents(self::ROOT.self::RECORD);
 
-        $this->assertNotFalse($doc, 'سجلّ السكيمة المؤجَّلة غير موجود.');
+        $this->assertNotFalse($record, 'سجلّ السكيمة المحذوفة غير موجود.');
 
-        preg_match_all('/^\|\s*`([a-z_]+)`\s*\|/m', $doc, $matches);
+        preg_match_all('/^\|\s*`([a-z_]+)`\s*\|/m', $record, $matches);
+
+        $this->assertNotEmpty($matches[1], 'السجلّ بلا جدول واحد — أُفرِغ أو تغيّر شكله.');
 
         return $matches[1];
     }

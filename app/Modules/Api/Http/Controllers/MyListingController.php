@@ -116,7 +116,6 @@ class MyListingController
             $listing = Listing::create([
                 ...$request->safe()->except('images', 'attributes'),
                 'user_id' => $request->user()->id,
-                'sale_type' => 'direct',
                 'status' => 'active',
                 'published_at' => now(),
                 'expires_at' => now()->addDays(30),

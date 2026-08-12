@@ -213,7 +213,6 @@ class ListingController
             priceCurrency: $base->priceCurrency,
             listingCurrency: $base->listingCurrency,
             condition: $base->condition,
-            saleType: $base->saleType,
             withImageOnly: $base->withImageOnly,
             sort: $base->sort,
             perPage: Pagination::perPage($request),

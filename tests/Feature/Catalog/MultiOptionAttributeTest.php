@@ -313,7 +313,6 @@ class MultiOptionAttributeTest extends TestCase
             'price_amount' => 45000,
             'currency_code' => 'YER',
             'price_type' => 'fixed',
-            'sale_type' => 'direct',
             'status' => 'active',
             'contact_phone' => '+967771234567',
             'published_at' => now(),

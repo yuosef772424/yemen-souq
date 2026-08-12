@@ -266,10 +266,6 @@ final class SearchQueryBuilder
             $query->where('condition_type', $criteria->condition);
         }
 
-        if ($criteria->saleType !== null) {
-            $query->where('sale_type', $criteria->saleType);
-        }
-
         if ($criteria->withImageOnly) {
             $query->whereHas('images');
         }

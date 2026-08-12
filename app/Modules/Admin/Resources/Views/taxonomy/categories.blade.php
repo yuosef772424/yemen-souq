@@ -56,11 +56,6 @@
                                            class="size-4 rounded border-line">
                                     <span>مفعّل</span>
                                 </label>
-                                <label class="flex items-center gap-2 text-xs">
-                                    <input type="checkbox" name="allows_auction" value="1" @checked($category->allows_auction)
-                                           class="size-4 rounded border-line">
-                                    <span>يسمح بالمزاد</span>
-                                </label>
                                 <button class="rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white">حفظ</button>
                             </form>
                         </td>

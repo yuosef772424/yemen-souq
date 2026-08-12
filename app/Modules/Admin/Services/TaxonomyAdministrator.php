@@ -60,13 +60,13 @@ final class TaxonomyAdministrator
      */
     public function updateCategory(?User $admin, Category $category, array $data): Category
     {
-        $before = $category->only(['name_ar', 'slug', 'is_active', 'allows_auction', 'sort_order']);
+        $before = $category->only(['name_ar', 'slug', 'is_active', 'sort_order']);
 
         $category->update($data);
 
         $this->audit->log($admin, AdminAction::CategoryUpdated, $category, meta: [
             'before' => $before,
-            'after' => $category->only(['name_ar', 'slug', 'is_active', 'allows_auction', 'sort_order']),
+            'after' => $category->only(['name_ar', 'slug', 'is_active', 'sort_order']),
         ]);
 
         return $category;

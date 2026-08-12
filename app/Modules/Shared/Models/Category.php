@@ -15,14 +15,13 @@ class Category extends Model
 
     protected $fillable = [
         'parent_id', 'name_ar', 'name_normalized', 'slug', 'icon',
-        'path', 'depth', 'allows_auction', 'is_active', 'sort_order',
+        'path', 'depth', 'is_active', 'sort_order',
     ];
 
     protected function casts(): array
     {
         return [
             'depth' => 'integer',
-            'allows_auction' => 'boolean',
             'is_active' => 'boolean',
             'sort_order' => 'integer',
         ];

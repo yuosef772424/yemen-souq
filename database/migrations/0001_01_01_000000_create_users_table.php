@@ -21,11 +21,17 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
-            $table->string('token');
-            $table->timestamp('created_at')->nullable();
-        });
+        /*
+        | لا جدول `password_reset_tokens` هنا.
+        |
+        | استعادة كلمة المرور في هذا المشروع تجري بالجوال عبر
+        | `phone_verifications` — البريد ثانويّ في اليمن والرقم هو
+        | الهوية. وجدولُ لارافل الافتراضي لم يلمسه سطر قط، ووجوده
+        | يوحي بمسارٍ ثانٍ للاستعادة لا وجود له.
+        |
+        | تعريفه محفوظ في docs/architecture/removed-schema.md، وإعادته
+        | تحتاج معها ضبط `auth.passwords` الذي أُسقط من config/auth.php.
+        */
 
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
@@ -43,7 +49,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
     }
 };

@@ -30,7 +30,6 @@ class CategoryResource extends JsonResource
             'icon' => $this->icon,
             'parent_id' => $this->parent_id,
             'depth' => (int) $this->depth,
-            'allows_auction' => (bool) $this->allows_auction,
             'children' => self::collection($this->whenLoaded('children')),
         ];
     }

@@ -48,7 +48,6 @@ class ListingResource extends JsonResource
             ],
 
             'condition' => $this->condition_type,
-            'sale_type' => $this->sale_type,
             'status' => $this->status,
 
             'category' => new CategoryResource($this->whenLoaded('category')),

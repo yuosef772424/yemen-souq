@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Api\Http\Controllers\AccountController;
 use App\Modules\Api\Http\Controllers\AuthController;
 use App\Modules\Api\Http\Controllers\ConversationController;
 use App\Modules\Api\Http\Controllers\DeviceController;
@@ -121,6 +122,10 @@ Route::prefix('v1')
                 Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
                 Route::get('/auth/phone', [PhoneVerificationController::class, 'status'])
                     ->name('auth.phone.status');
+
+                Route::get('/me/notification-preferences', [AccountController::class, 'notificationPreferences'])
+                    ->name('me.notification-preferences');
+                Route::get('/me/privacy', [AccountController::class, 'privacy'])->name('me.privacy');
             });
 
             Route::middleware('throttle:api-write')->group(function (): void {
@@ -150,6 +155,18 @@ Route::prefix('v1')
                     ->name('auth.phone.send');
                 Route::post('/auth/phone/verify', [PhoneVerificationController::class, 'verify'])
                     ->name('auth.phone.verify');
+
+                /*
+                | كلمة المرور والرقم على حدّ المصادقة لا الكتابة.
+                |
+                | كلاهما يمسّ مفتاح الحساب: الأول يُبطل رموز الأجهزة
+                | الأخرى، والثاني يرسل رسالة بكلفة حقيقية ويُسقط التوثيق.
+                | وحدُّ الكتابة السخيّ يجعلهما هدفاً لمن سرق رمزاً.
+                */
+                Route::put('/me/password', [AccountController::class, 'updatePassword'])
+                    ->name('me.password');
+                Route::put('/me/phone', [AccountController::class, 'updatePhone'])
+                    ->name('me.phone');
             });
 
             // ─── القراءة الخاصة ───
@@ -181,6 +198,24 @@ Route::prefix('v1')
             // ─── الكتابة ───
 
             Route::middleware('throttle:api-write')->group(function (): void {
+
+                // ─── الحساب ───
+
+                Route::put('/me/profile', [AccountController::class, 'updateProfile'])
+                    ->name('me.profile');
+
+                // POST لا PUT: PHP لا يحلّل جسد multipart إلا على POST
+                Route::post('/me/avatar', [AccountController::class, 'updateAvatar'])->name('me.avatar');
+                Route::delete('/me/avatar', [AccountController::class, 'destroyAvatar'])
+                    ->name('me.avatar.destroy');
+
+                Route::put('/me/notification-preferences', [AccountController::class, 'updateNotificationPreferences'])
+                    ->name('me.notification-preferences.update');
+                Route::put('/me/privacy', [AccountController::class, 'updatePrivacy'])
+                    ->name('me.privacy.update');
+
+                // إغلاق الحساب — DELETE على الجذر، ويشترط كلمة المرور
+                Route::delete('/me', [AccountController::class, 'destroy'])->name('me.destroy');
 
                 /*
                 | النشر والتعديل خلف بوابة الهاتف — وحدهما.

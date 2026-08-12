@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
@@ -34,6 +35,15 @@ class User extends Authenticatable
      * ثانٍ يعني علاقتين وسياستين لنفس الصف.
      */
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
+
+    /**
+     * نطاقٌ لا يُرسَل إليه بريد، يُوسَم به بريد الحساب المُغلق.
+     *
+     * `.invalid` محجوز بمعيار RFC 2606 لهذا الغرض تحديداً: لا يُسجَّل
+     * ولا يُحلّ في DNS. فلو تسرّب العنوان إلى طابور بريد لم يذهب إلى
+     * أحد — بخلاف نطاق مخترَع قد يملكه شخص غداً.
+     */
+    public const DELETED_EMAIL_DOMAIN = 'deleted.invalid';
 
     /**
      * phone قابل للتعيين الجماعي، وphone_verified_at وstatus ليسا كذلك
@@ -103,6 +113,20 @@ class User extends Authenticatable
     public function displayName(): string
     {
         return $this->profile?->display_name ?: $this->name;
+    }
+
+    /**
+     * عنوان صورة الحساب، أو null.
+     *
+     * الرابط يُبنى هنا لا في القالب: المسار مخزَّن نسبياً على قرص
+     * `public`، وبناؤه في كل موضع عرض يعني أن تغيير القرص لاحقاً يحتاج
+     * تعديل كل قالب — ونسيان واحدٍ يُظهر صورةً مكسورة.
+     */
+    public function avatarUrl(): ?string
+    {
+        $path = $this->profile?->avatar_path;
+
+        return $path === null ? null : Storage::disk('public')->url($path);
     }
 
     public function hasVerifiedPhone(): bool

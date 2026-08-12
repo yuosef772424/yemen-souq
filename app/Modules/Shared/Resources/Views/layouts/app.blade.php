@@ -54,6 +54,13 @@
                    class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">الإشعارات</a>
                 <a href="{{ route('account.favorites') }}"
                    class="hidden rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink sm:block">المفضلة</a>
+                {{--
+                    «حسابي» آخر الروابط لا أولها: يُفتح مرةً كل عدة أشهر،
+                    بينما ما قبله يُفتح كل زيارة. والترتيب في الترويسة
+                    يُقرأ كترتيب أهمية.
+                --}}
+                <a href="{{ route('account.settings') }}"
+                   class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">حسابي</a>
             </nav>
 
             <form method="POST" action="{{ route('logout') }}">

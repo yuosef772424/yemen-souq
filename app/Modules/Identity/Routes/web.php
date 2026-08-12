@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Identity\Http\Controllers\AccountController;
 use App\Modules\Identity\Http\Controllers\LoginController;
 use App\Modules\Identity\Http\Controllers\PasswordResetController;
 use App\Modules\Identity\Http\Controllers\PhoneVerificationController;
@@ -42,4 +43,29 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/verify-phone', [PhoneVerificationController::class, 'show'])->name('phone.verify');
     Route::post('/verify-phone', [PhoneVerificationController::class, 'verify']);
     Route::post('/verify-phone/resend', [PhoneVerificationController::class, 'resend'])->name('phone.resend');
+});
+
+/*
+| إعدادات الحساب.
+|
+| تحت `account/` لتجاور «إعلاناتي» و«رسائلي» و«الإشعارات» — لوحة المستخدم
+| مكان واحد، وصفحة إعداداتٍ في جذر الموقع تبدو صفحة نظام لا صفحة حساب.
+|
+| وبلا `EnsurePhoneIsVerified` بقصد وبمنطق مقلوب عن بقية المسارات: من
+| كتب رقمه خطأً عند التسجيل **لا يستطيع** توثيقه، وحجب صفحة تصحيح الرقم
+| خلف التوثيق يقفل عليه الباب من الداخل.
+|
+| وكل تغيير حالة بفعله الصريح: PUT للتعديل وDELETE للإغلاق. الإغلاق
+| خصوصاً لا يقبل GET — رابطٌ يُغلق حساباً ينفّذه أي جالبٍ مسبق في
+| المتصفح.
+*/
+
+Route::middleware('auth')->prefix('account')->name('account.')->group(function (): void {
+    Route::get('/settings', [AccountController::class, 'edit'])->name('settings');
+
+    Route::put('/settings/profile', [AccountController::class, 'updateProfile'])->name('profile.update');
+    Route::put('/settings/password', [AccountController::class, 'updatePassword'])->name('password.update');
+    Route::put('/settings/phone', [AccountController::class, 'updatePhone'])->name('phone.update');
+
+    Route::delete('/settings', [AccountController::class, 'destroy'])->name('destroy');
 });

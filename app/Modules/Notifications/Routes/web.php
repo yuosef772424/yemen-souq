@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Notifications\Http\Controllers\NotificationController;
+use App\Modules\Notifications\Http\Controllers\NotificationPreferenceController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -24,6 +25,18 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('auth')->prefix('account')->name('account.')->group(function (): void {
     Route::get('/notifications', [NotificationController::class, 'index'])
         ->name('notifications');
+
+    /*
+    | التفضيلات قبل `{notification}` — نفس فخّ read-all.
+    |
+    | المسار المتغيّر يلتقط `settings` كمعرّف فيرجع 404، والفرق أن هذا
+    | مسار GET لا POST فالخطأ يظهر بأول نقرة.
+    */
+    Route::get('/notifications/settings', [NotificationPreferenceController::class, 'edit'])
+        ->name('notifications.preferences');
+
+    Route::put('/notifications/settings', [NotificationPreferenceController::class, 'update'])
+        ->name('notifications.preferences.update');
 
     Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])
         ->name('notifications.read-all');

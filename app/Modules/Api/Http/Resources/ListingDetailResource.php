@@ -72,6 +72,7 @@ class ListingDetailResource extends ListingResource
             'seller' => $this->whenLoaded('user', fn (): ?array => $this->user === null ? null : [
                 'id' => $this->user->id,
                 'name' => $this->user->displayName(),
+                'avatar_url' => $this->user->avatarUrl(),
                 'member_since' => $this->user->created_at?->toIso8601String(),
             ]),
 

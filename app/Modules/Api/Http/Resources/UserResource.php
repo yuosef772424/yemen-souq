@@ -38,6 +38,7 @@ class UserResource extends JsonResource
             'name' => $this->displayName(),
             'phone' => YemeniPhone::forDisplay($this->phone),
             'email' => $this->email,
+            'avatar_url' => $this->avatarUrl(),
             'phone_verified' => $this->hasVerifiedPhone(),
             'status' => $this->status ?? 'active',
             'can_publish' => ! (bool) config('identity.require_phone_verification_to_publish', true)

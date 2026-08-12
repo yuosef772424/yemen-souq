@@ -187,8 +187,20 @@
         </div>
 
         <div class="rounded-2xl border border-line bg-white p-5">
-            <p class="text-sm font-semibold">{{ $listing->user?->displayName() ?? 'معلن' }}</p>
-            <p class="mt-0.5 text-xs text-muted">عضو منذ {{ $listing->user?->created_at?->translatedFormat('F Y') }}</p>
+            <div class="flex items-center gap-3">
+                @if ($listing->user?->avatarUrl())
+                    <img src="{{ $listing->user->avatarUrl() }}" alt=""
+                         class="size-11 shrink-0 rounded-full object-cover">
+                @else
+                    <span class="grid size-11 shrink-0 place-items-center rounded-full bg-canvas text-base font-bold text-muted"
+                          aria-hidden="true">{{ mb_substr($listing->user?->displayName() ?? 'م', 0, 1) }}</span>
+                @endif
+
+                <div class="min-w-0">
+                    <p class="truncate text-sm font-semibold">{{ $listing->user?->displayName() ?? 'معلن' }}</p>
+                    <p class="mt-0.5 text-xs text-muted">عضو منذ {{ $listing->user?->created_at?->translatedFormat('F Y') }}</p>
+                </div>
+            </div>
 
             @if ($listing->contact_phone && ! $listing->hide_phone)
                 <div x-data="contactReveal('{{ $listing->slug }}')" class="mt-4">

@@ -38,7 +38,11 @@
 
     <form method="POST" action="{{ route('account.listings.update', $listing) }}" enctype="multipart/form-data"
           class="mt-6 space-y-5"
-          x-data="listingForm({{ $remainingImages }})"
+          x-data="listingForm(
+              {{ $remainingImages }},
+              '{{ old('category_id', $listing->category_id) }}',
+              {{ $attributesByCategory->keys()->toJson() }}
+          )"
           x-init="priceType = '{{ old('price_type', $listing->price_type) }}'">
         @csrf
         @method('PUT')
@@ -68,7 +72,10 @@
                     <label for="category_id" class="block text-sm font-medium">
                         التصنيف <span class="text-red-600">*</span>
                     </label>
-                    <select id="category_id" name="category_id" required
+                    {{-- x-model يربط الحقل بحالة Alpine، وهو ما يجعل حقول
+                         المواصفات تتبدّل مع تغيير التصنيف هنا كما في نموذج
+                         النشر تماماً --}}
+                    <select id="category_id" name="category_id" required x-model="categoryId"
                             class="mt-1.5 w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm focus:border-brand focus:outline-none">
                         @foreach ($categories as $category)
                             <optgroup label="{{ $category->name_ar }}">
@@ -116,6 +123,16 @@
                 </select>
             </div>
         </fieldset>
+
+        {{-- ═══ المواصفات ═══
+             نفس القالب الجزئي المستعمل في النشر، ومعه القيم المحفوظة.
+             تغيير التصنيف أعلاه يبدّل الحقول المعروضة — والقيم القديمة
+             تُمحى عند الحفظ لا عند التبديل، فالعودة إلى التصنيف الأصلي
+             قبل الحفظ لا تُفقد شيئاً --}}
+        @include('catalog::partials.attribute-fields', [
+            'attributesByCategory' => $attributesByCategory,
+            'selected' => $selectedAttributes,
+        ])
 
         {{-- ═══ السعر ═══ --}}
         <fieldset class="rounded-2xl border border-line bg-white p-5">

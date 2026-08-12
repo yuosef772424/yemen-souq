@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Modules\Catalog\Http\Requests\UpdateListingRequest;
 use App\Modules\Catalog\Models\Listing;
 use App\Modules\Catalog\Models\ListingImage;
+use App\Modules\Catalog\Services\ListingAttributes;
 use App\Modules\Catalog\Services\ListingImageService;
 use App\Modules\Catalog\Services\ListingRenewalService;
 use App\Modules\Catalog\Services\ListingSaleMarker;
@@ -46,6 +47,7 @@ class AccountListingController
         private readonly ListingRenewalService $renewal,
         private readonly ListingStatsReader $stats,
         private readonly ListingSaleMarker $sales,
+        private readonly ListingAttributes $attributes,
     ) {}
 
     // ─── إعلاناتي ───
@@ -81,6 +83,12 @@ class AccountListingController
             'governorates' => Location::active()->governorates()->with('children')->get(),
             'maxImages' => ListingImageService::MAX_PER_LISTING,
             'remainingImages' => max(0, ListingImageService::MAX_PER_LISTING - $listing->images->count()),
+
+            // نفس مصدرَي نموذج النشر: خريطة الصفات لكل تصنيف، والقيم
+            // الحالية. القالب الجزئي واحد للنموذجين، فاختلاف ما يُمرَّر
+            // إليه هو كل ما يفرّق بين «أضف» و«عدّل»
+            'attributesByCategory' => $this->attributes->groupedByCategory(),
+            'selectedAttributes' => $this->attributes->currentFor($listing),
         ]);
     }
 
@@ -100,12 +108,19 @@ class AccountListingController
      *
      *  · لا يسجّل تغيّر السعر: الـObserver يكتب listing_price_history
      *    في updated. فتعديل السعر من اللوحة يُسجَّل تلقائياً.
+     *
+     * والمواصفات تُكتب **بعد** حفظ الإعلان لا قبله: ListingAttributes::write
+     * تقرأ category_id من النموذج لتعرف أي صفات مسموحة. فلو سبقت الحفظ
+     * لقرأت التصنيف القديم — فتكتب صفات «سيارات» على إعلان صار «شققاً»،
+     * وهي بالضبط الحالة التي جاء التعديل ليدعمها.
      */
     public function update(UpdateListingRequest $request, Listing $listing): RedirectResponse
     {
         Gate::authorize('update', $listing);
 
-        $listing->update($request->safe()->except('images'));
+        $listing->update($request->safe()->except('images', 'attributes'));
+
+        $this->attributes->write($listing, $request->validated('attributes', []));
 
         $result = $this->images->attach($listing, $request->file('images', []));
 

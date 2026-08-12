@@ -191,20 +191,28 @@ class ListingAttributes
             ];
         }
 
-        $allowedIds = $allowed->pluck('id');
-
-        DB::transaction(function () use ($listing, $allowedIds, $rows, $multiRows): void {
-            // الحذف ثم الإدراج لا upsert: التعديل قد يُفرغ صفة كانت
-            // مملوءة، وupsert وحده يُبقي القيمة القديمة إلى الأبد
-            DB::table('listing_attribute_values')
-                ->where('listing_id', $listing->id)
-                ->whereIn('attribute_id', $allowedIds)
-                ->delete();
-
-            DB::table('listing_multi_options')
-                ->where('listing_id', $listing->id)
-                ->whereIn('attribute_id', $allowedIds)
-                ->delete();
+        DB::transaction(function () use ($listing, $rows, $multiRows): void {
+            /**
+             * الحذف ثم الإدراج لا upsert: التعديل قد يُفرغ صفة كانت
+             * مملوءة، وupsert وحده يُبقي القيمة القديمة إلى الأبد.
+             *
+             * ═══ والحذف يشمل كل صفات الإعلان لا صفات تصنيفه ═══
+             *
+             * كان مقصوراً على ‎whereIn(allowedIds)‎، وهو صحيح ما دام
+             * التصنيف ثابتاً. لكنّ التعديل يسمح بتغييره — ومعلن ينقل
+             * إعلانه من «سيارات» إلى «شقق» كان يترك خلفه صفّ «الممشى»
+             * في listing_attribute_values إلى الأبد.
+             *
+             * والصفّ اليتيم لا يظهر في الصفحة (forDisplay يمرّ على صفات
+             * التصنيف الجديد وحدها) لكنه **يُطابَق في البحث**:
+             * AttributeFilters يستعلم بـ(listing_id, attribute_id) بلا أي
+             * ربط بالتصنيف. فتُرجع فلترة «ممشى أقل من 100 ألف» شقةً.
+             *
+             * عطلٌ صامت تماماً: لا خطأ، ولا أثر في الواجهة، ونتيجةُ بحثٍ
+             * واحدة خاطئة بين عشرات الصحيحة.
+             */
+            DB::table('listing_attribute_values')->where('listing_id', $listing->id)->delete();
+            DB::table('listing_multi_options')->where('listing_id', $listing->id)->delete();
 
             if ($rows !== []) {
                 DB::table('listing_attribute_values')->insert($rows);
@@ -214,6 +222,63 @@ class ListingAttributes
                 DB::table('listing_multi_options')->insert($multiRows);
             }
         });
+    }
+
+    /**
+     * القيم الحالية بالشكل الذي يقرؤه نموذج التعديل.
+     *
+     * المفتاح `attribute_id` والقيمة قابلةٌ للوضع مباشرةً في الحقل: رقم
+     * أو نصّ أو معرّف خيار، ومصفوفةُ معرّفات للخيارات المتعددة.
+     *
+     * ولماذا شكلٌ ثالث غير forDisplay: ذاك يُخرج نصّاً مقروءاً («أوتوماتيك»،
+     * «نعم») وهذا يُخرج القيمة الخام. تمرير المقروء إلى نموذج التعديل يعني
+     * أن `select` لا يجد خياراً يطابق «أوتوماتيك» — فيُعرض الحقل فارغاً،
+     * ويحفظ المعلن إعلانه فيفقد مواصفةً لم يمسّها.
+     *
+     * ولا يقتصر على صفات التصنيف الحالي بقصد: `write` تحذف كل شيء ثم
+     * تكتب المسموح، فحصرُ القراءة هنا يخفي عن المعلن قيماً موجودة فعلاً
+     * قبل أن تُمحى.
+     *
+     * @return array<int, mixed>
+     */
+    public function currentFor(Listing $listing): array
+    {
+        $current = [];
+
+        $values = DB::table('listing_attribute_values')
+            ->where('listing_id', $listing->id)
+            ->get();
+
+        foreach ($this->forCategory($listing->category_id) as $attribute) {
+            $row = $values->firstWhere('attribute_id', $attribute->id);
+
+            if ($row === null) {
+                continue;
+            }
+
+            $current[$attribute->id] = match ($attribute->data_type) {
+                // rtrim على decimal(18,4): بلاه يصل «2018.0000» إلى حقل
+                // number فيعرضه المتصفح كما هو
+                'number' => $row->value_number === null
+                    ? null
+                    : rtrim(rtrim(number_format((float) $row->value_number, 4, '.', ''), '0'), '.'),
+                'boolean' => (bool) $row->value_boolean,
+                'option' => $row->option_id,
+                'date' => $row->value_date,
+                default => $row->value_string,
+            };
+        }
+
+        $multi = DB::table('listing_multi_options')
+            ->where('listing_id', $listing->id)
+            ->get()
+            ->groupBy('attribute_id');
+
+        foreach ($multi as $attributeId => $rows) {
+            $current[(int) $attributeId] = $rows->pluck('option_id')->all();
+        }
+
+        return $current;
     }
 
     /**

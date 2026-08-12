@@ -2,6 +2,7 @@
 
 namespace App\Modules\Catalog\Http\Requests;
 
+use App\Modules\Catalog\Services\ListingAttributes;
 use App\Modules\Catalog\Services\ListingImageService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -29,6 +30,15 @@ class UpdateListingRequest extends FormRequest
     public function rules(): array
     {
         return [
+            /**
+             * القواعد مشتقّة من التصنيف **المرسَل** لا من تصنيف الإعلان.
+             *
+             * المعلن قد يغيّر التصنيف في نفس الحفظة، والاشتقاق من القديم
+             * يعني التحقق من صفات لن تُكتب وتركَ ما سيُكتب بلا تحقق —
+             * وهو الفرق بين حارسٍ وزينة.
+             */
+            ...app(ListingAttributes::class)->rules($this->integerOrNull('category_id')),
+
             'title' => ['required', 'string', 'min:6', 'max:180'],
             'description' => ['nullable', 'string', 'max:5000'],
             'category_id' => ['required', 'integer', 'exists:categories,id'],
@@ -83,5 +93,13 @@ class UpdateListingRequest extends FormRequest
         if (is_string($phone = $this->input('contact_phone'))) {
             $this->merge(['contact_phone' => preg_replace('/[\s\-]/', '', $phone)]);
         }
+    }
+
+    /** بنفس حجّة StoreListingRequest: قيمة غير صالحة = لا تصنيف = لا قواعد خصائص */
+    private function integerOrNull(string $key): ?int
+    {
+        $value = $this->input($key);
+
+        return is_numeric($value) ? (int) $value : null;
     }
 }

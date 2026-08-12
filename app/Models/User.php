@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 /**
  * كل ما تستدعيه وحدة الهوية من هذا النموذج، في مكان واحد.
@@ -25,7 +26,14 @@ use Illuminate\Notifications\Notifiable;
  */
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, SoftDeletes;
+    /**
+     * HasApiTokens لوحدة Api — الرموز الشخصية في personal_access_tokens.
+     *
+     * السمة هنا لا في نموذج فرعي: الحارس sanctum يحلّ نفس النموذج الذي
+     * يحلّه حارس الجلسة، فالويب والتطبيق يقرآن مستخدماً واحداً. ونموذج
+     * ثانٍ يعني علاقتين وسياستين لنفس الصف.
+     */
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
     /**
      * phone قابل للتعيين الجماعي، وphone_verified_at وstatus ليسا كذلك

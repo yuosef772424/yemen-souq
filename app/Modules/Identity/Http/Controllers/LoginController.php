@@ -2,11 +2,11 @@
 
 namespace App\Modules\Identity\Http\Controllers;
 
+use App\Modules\Identity\Support\LoginThrottle;
 use App\Modules\Identity\Support\YemeniPhone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -39,7 +39,7 @@ class LoginController
             : ['email' => $request->input('identifier'), 'password' => $request->input('password')];
 
         if (! Auth::attempt($credentials, $request->boolean('remember'))) {
-            RateLimiter::hit($this->rateKey($request), 60);
+            LoginThrottle::hit($request->input('identifier'));
 
             throw ValidationException::withMessages([
                 'identifier' => 'البيانات غير صحيحة.',
@@ -65,7 +65,7 @@ class LoginController
             ]);
         }
 
-        RateLimiter::clear($this->rateKey($request));
+        LoginThrottle::clear($request->input('identifier'));
 
         $request->session()->regenerate();
         Auth::user()->forceFill(['last_login_at' => now()])->save();
@@ -82,17 +82,19 @@ class LoginController
         return redirect()->route('search');
     }
 
+    /**
+     * الميزانية مشتركة مع وحدة Api — انظر LoginThrottle.
+     *
+     * كانت هنا بمفتاح محلي. ونقلها صار ضرورياً حين ظهرت نقطة دخول
+     * ثانية: حدّان مستقلان يعنيان أن المهاجم يضاعف محاولاته بالتنقّل
+     * بين القناتين.
+     */
     private function guardRate(Request $request): void
     {
-        if (RateLimiter::tooManyAttempts($this->rateKey($request), 5)) {
+        if (LoginThrottle::tooManyAttempts($request->input('identifier'))) {
             throw ValidationException::withMessages([
                 'identifier' => 'محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة.',
             ]);
         }
-    }
-
-    private function rateKey(Request $request): string
-    {
-        return 'login:' . mb_strtolower((string) $request->input('identifier'));
     }
 }

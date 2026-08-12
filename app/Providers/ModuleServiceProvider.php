@@ -22,6 +22,9 @@ use Illuminate\Support\Str;
  */
 class ModuleServiceProvider extends ServiceProvider
 {
+    /** ملف المسارات الذي يُسجَّل بلا جلسة — انظر registerRoutes */
+    private const API_ROUTES_FILE = 'api.php';
+
     public function register(): void
     {
         // في register لا boot: موفّرات الوحدات تحمل روابط حاوية يجب أن
@@ -69,6 +72,19 @@ class ModuleServiceProvider extends ServiceProvider
      * مجموعة web صريحة هنا: الملفات كانت تُحمَّل بـrequire من داخل
      * routes/web.php فترث المجموعة ضمناً. تسجيلها من موفّر يخرجها من ذلك
      * السياق — وبلا الوسيط تفقد الجلسة وحماية CSRF بصمت.
+     *
+     * ═══ واستثناء واحد: Routes/api.php ═══
+     *
+     * الاسم يحمل معناه هنا لا في الوحدة. ملفٌ بهذا الاسم يُسجَّل تحت
+     * مجموعة `api` وبادئة `/api`، وما عداه تحت `web`.
+     *
+     * ولماذا القاعدة عامة لا خاصة بوحدة Api: العقد هو «مجلد يعمل بمجرد
+     * وجوده»، وقاعدةٌ تعرف اسم وحدةٍ بعينها تنقضه. أيّ وحدة تحتاج غداً
+     * نقطةَ نهاية بلا جلسة تضع الملف باسمه وتحصل عليها.
+     *
+     * والفرق ليس بادئةً في الرابط: مجموعة `web` تعني جلسةً وكوكيز
+     * وتحقّق CSRF. مسارٌ بلا حالة يحمل رمزاً في الترويسة لا يملك رمز
+     * CSRF ولا يريده — فيُرفض كل POST منه بـ419 بلا سبب ظاهر.
      */
     private function registerRoutes(): void
     {
@@ -77,6 +93,12 @@ class ModuleServiceProvider extends ServiceProvider
         }
 
         foreach ($this->modulePaths('Routes/*.php') as $file) {
+            if (basename($file) === self::API_ROUTES_FILE) {
+                Route::middleware('api')->prefix('api')->group($file);
+
+                continue;
+            }
+
             Route::middleware('web')->group($file);
         }
     }

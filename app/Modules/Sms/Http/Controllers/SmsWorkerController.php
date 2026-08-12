@@ -2,8 +2,11 @@
 
 namespace App\Modules\Sms\Http\Controllers;
 
+use App\Modules\Sms\Enums\DeliveryChannel;
 use App\Modules\Sms\Http\Requests\ConfirmDeliveryRequest;
+use App\Modules\Sms\Http\Requests\InboundMessagesRequest;
 use App\Modules\Sms\Models\SmsMessage;
+use App\Modules\Sms\Services\ChallengeVerifier;
 use App\Modules\Sms\Services\SmsOutbox;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,6 +35,7 @@ class SmsWorkerController
 {
     public function __construct(
         private readonly SmsOutbox $outbox,
+        private readonly ChallengeVerifier $challenges,
     ) {}
 
     /**
@@ -47,7 +51,18 @@ class SmsWorkerController
     {
         $worker = $this->workerName($request);
 
-        $result = $this->outbox->claim($worker, $request->integer('limit') ?: null);
+        /**
+         * القناة من الطلب، وSMS افتراضها.
+         *
+         * العامل على الهاتف يسحب `sms` وحدها — وواتساب يدفعه الخادم.
+         * والافتراض هنا يجعل عاملاً قديماً لا يرسل `channel` يبقى صحيحاً
+         * بعد إضافة القناة الثانية: التطبيق على الهاتف لا يُحدَّث مع كل
+         * نشر.
+         */
+        $channel = DeliveryChannel::tryFrom((string) $request->input('channel', 'sms'))
+            ?? DeliveryChannel::Sms;
+
+        $result = $this->outbox->claim($worker, $request->integer('limit') ?: null, $channel);
 
         return response()->json([
             'claim_token' => $result['claim_token'],
@@ -94,6 +109,55 @@ class SmsWorkerController
             'sent' => $sent,
             'failed' => $failed,
             'ignored' => $ignored,
+        ]);
+    }
+
+    /**
+     * رسائل واردة يرفعها الهاتف — القناة العكسية.
+     *
+     * ═══ الاستجابة لا تقول أيّها طابق ═══
+     *
+     * `verified` عددٌ لا قائمة. والسبب أن الردّ يعود إلى هاتفٍ قد يكون
+     * سجلّه مقروءاً لغير صاحبه — وقولُ «الرسالة من 771234567 وثّقت
+     * حساباً» يضع ربطاً بين رقم وحساب في مكان لا يحتاجه.
+     *
+     * والهاتف لا يحتاجه فعلاً: وظيفته الرفع، والقرار هنا.
+     *
+     * ═══ والتكرار غير ضارّ ═══
+     *
+     * السكربت قد يرفع نفس الرسالة مرتين (انقطاع بعد الرفع وقبل تسجيل
+     * الموضع). والثانية تجد التحدّي مُستهلَكاً فتُرجع `no_challenge` —
+     * ولا تحرق محاولة لأن البحث لا يجد صفّاً أصلاً.
+     */
+    public function inbound(InboundMessagesRequest $request): JsonResponse
+    {
+        if (! (bool) config('sms.inbound.enabled', false)) {
+            return response()->json([
+                'message' => 'القناة العكسية مطفأة.',
+                'code' => 'inbound_disabled',
+            ], 409);
+        }
+
+        $processed = 0;
+        $verified = 0;
+
+        foreach ($request->validated('messages') as $row) {
+            $processed++;
+
+            $token = $this->challenges->extractToken((string) $row['body']);
+
+            if ($token === null) {
+                continue;
+            }
+
+            if ($this->challenges->consume((string) $row['from'], $token)->succeeded()) {
+                $verified++;
+            }
+        }
+
+        return response()->json([
+            'processed' => $processed,
+            'verified' => $verified,
         ]);
     }
 

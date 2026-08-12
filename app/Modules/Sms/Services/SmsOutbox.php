@@ -2,7 +2,9 @@
 
 namespace App\Modules\Sms\Services;
 
+use App\Modules\Sms\Enums\DeliveryChannel;
 use App\Modules\Sms\Enums\SmsStatus;
+use App\Modules\Sms\Jobs\DeliverWhatsApp;
 use App\Modules\Sms\Models\SmsMessage;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -61,11 +63,16 @@ final class SmsOutbox
         string $body,
         string $purpose = 'general',
         ?CarbonInterface $expiresAt = null,
+        ?DeliveryChannel $channel = null,
+        ?int $failedOverFrom = null,
     ): SmsMessage {
+        $channel ??= $this->preferredChannelFor($to);
+
         $message = new SmsMessage([
             'to' => $to,
             'body' => $body,
             'purpose' => $purpose,
+            'channel' => $channel,
             'expires_at' => $expiresAt ?? now()->addMinutes(
                 (int) config('sms.default_ttl_minutes', 10)
             ),
@@ -75,9 +82,98 @@ final class SmsOutbox
         $message->forceFill([
             'status' => SmsStatus::Queued,
             'attempts' => 0,
+            'failed_over_from' => $failedOverFrom,
         ])->save();
 
+        /**
+         * القناة المدفوعة تُوقَظ فوراً، ولا تُترك للمجدول.
+         *
+         * SMS ينتظر هاتفاً ينادي كل ثوانٍ. وواتساب لا ينتظر شيئاً إلا
+         * أن يلتقطه أحد — فبلا هذا السطر يقع التوصيل على `sms:dispatch`
+         * في المجدول، أي دقيقةً كاملة على رمزٍ يعيش عشراً.
+         *
+         * والمجدول يبقى شبكةَ أمان: مهمّة تسقط أو طابور متوقف يعني
+         * رسالةً تنتظر — لا رسالةً تضيع.
+         */
+        if (! $channel->isPulled()) {
+            DeliverWhatsApp::dispatch($message->id);
+        }
+
         return $message;
+    }
+
+    /**
+     * القناة التي تبدأ منها رسائل هذا الرقم.
+     *
+     * ═══ الحظر يُتعلَّم من التاريخ لا من إشارة مشغّل ═══
+     *
+     * لا يصلنا من المشغّل ما يقول «هذا الرقم محظور». ما يصلنا فشلٌ
+     * متكرّر. فبعد `blocked_after` فشلاً نهائياً متتالياً على القناة
+     * الافتراضية، تبدأ رسائل هذا الرقم من البديلة مباشرةً — بدل أن تحرق
+     * ثلاث محاولات وتنتظر التراجع في كل مرة.
+     *
+     * والشرط «متتالية» لا «مجموع»: رقمٌ فشل مرتين قبل شهر ونجح بعدها
+     * ليس محظوراً. ولذلك يُقرأ آخر ما وصل إلى حالة نهائية فقط.
+     */
+    public function preferredChannelFor(string $to): DeliveryChannel
+    {
+        $default = DeliveryChannel::tryFrom((string) config('sms.default_channel', 'sms'))
+            ?? DeliveryChannel::Sms;
+
+        $alternative = $default->failover();
+        $threshold = (int) config('sms.blocked_after', 2);
+
+        if ($alternative === null || $threshold <= 0) {
+            return $default;
+        }
+
+        $recent = SmsMessage::query()
+            ->where('to', $to)
+            ->where('channel', $default)
+            ->whereIn('status', [SmsStatus::Sent, SmsStatus::Failed])
+            ->orderByDesc('id')
+            ->limit($threshold)
+            ->pluck('status');
+
+        if ($recent->count() < $threshold) {
+            return $default;
+        }
+
+        return $recent->every(fn (SmsStatus $status): bool => $status === SmsStatus::Failed)
+            ? $alternative
+            : $default;
+    }
+
+    /**
+     * سحب رسالة بعينها — للقنوات التي يدفعها الخادم.
+     *
+     * نفس الشرط الذرّي الذي يحمي السحب بالدفعة: مهمّتان للطابور على نفس
+     * المعرّف (إعادة محاولة، أو مهمّة مكرَّرة) لا يجوز أن ترسلا مرتين.
+     */
+    public function claimOne(int $id, string $worker): ?SmsMessage
+    {
+        $token = (string) Str::uuid();
+        $ttl = (int) config('sms.worker.claim_ttl_seconds', 120);
+
+        $updated = SmsMessage::query()
+            ->whereKey($id)
+            ->where('status', SmsStatus::Queued)
+            ->where(function ($query): void {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->update([
+                'status' => SmsStatus::Claimed,
+                'claim_token' => $token,
+                'claimed_by' => Str::limit($worker, 60, ''),
+                'claimed_at' => now(),
+                'claim_expires_at' => now()->addSeconds($ttl),
+                'attempts' => DB::raw('attempts + 1'),
+                'updated_at' => now(),
+            ]);
+
+        return $updated === 1
+            ? SmsMessage::query()->where('claim_token', $token)->first()
+            : null;
     }
 
     /**
@@ -90,17 +186,18 @@ final class SmsOutbox
      *
      * @return array{claim_token: ?string, messages: Collection<int, SmsMessage>}
      */
-    public function claim(string $worker, ?int $limit = null): array
+    public function claim(string $worker, ?int $limit = null, ?DeliveryChannel $channel = null): array
     {
         $this->reap();
 
+        $channel ??= DeliveryChannel::Sms;
         $limit = max(1, min($limit ?? (int) config('sms.worker.claim_batch', 5), 25));
         $token = (string) Str::uuid();
         $ttl = (int) config('sms.worker.claim_ttl_seconds', 120);
 
-        $claimed = DB::transaction(function () use ($worker, $limit, $token, $ttl): Collection {
+        $claimed = DB::transaction(function () use ($worker, $limit, $token, $ttl, $channel): Collection {
             $ids = SmsMessage::query()
-                ->claimable()
+                ->claimable($channel)
                 // الأقدم أولاً: رمز التحقق يتقادم، وترتيبٌ غيره يجعل
                 // من طلب أولاً ينتظر أطول
                 ->orderBy('id')
@@ -191,7 +288,7 @@ final class SmsOutbox
 
         $exhausted = $message->attempts >= (int) config('sms.max_attempts', 3);
 
-        return $this->confirm($id, $claimToken, [
+        $confirmed = $this->confirm($id, $claimToken, [
             'status' => $exhausted ? SmsStatus::Failed : SmsStatus::Queued,
             'failed_at' => $exhausted ? now() : null,
             'error' => $error === null ? null : Str::limit($error, self::ERROR_LIMIT, ''),
@@ -200,6 +297,54 @@ final class SmsOutbox
             'claim_expires_at' => null,
             'updated_at' => now(),
         ]);
+
+        if ($confirmed && $exhausted) {
+            $this->failOver($message->fresh());
+        }
+
+        return $confirmed;
+    }
+
+    /**
+     * القناة سقطت — أعِد **نفس الرمز** على القناة التالية.
+     *
+     * ═══ نفس الرمز، لا رمزٌ جديد ═══
+     *
+     * أهمّ سطر هنا هو ما لا يقع: لا نداءَ لـ`PhoneVerificationService::issue`.
+     * ذاك يُبطل الرمز السابق ويُصدر آخر — فلو ناداه التراجع لأبطل رمزاً
+     * قد يكون وصل فعلاً عبر SMS بعد أن انقطع التأكيد. والمستخدم يكتب ما
+     * وصله فيُرفض.
+     *
+     * والنصّ متاح لأن المحو يقع عند **النجاح** وحده: الرسالة الفاشلة
+     * تحتفظ بجسدها، وهو ما يجعل التراجع ممكناً أصلاً.
+     *
+     * ═══ وثلاثة شروط قبله ═══
+     *
+     * 1. للقناة تالية — الخريطة غير دائرية، فواتساب لا يعود إلى SMS.
+     * 2. الأجل باقٍ — رمزٌ مات لا يُعاد إرساله على قناة أخرى، فيصل ميتاً.
+     * 3. لم تكن هي نفسها تراجعاً — قفزة واحدة لا سلسلة.
+     */
+    private function failOver(?SmsMessage $message): void
+    {
+        if ($message === null || $message->failed_over_from !== null) {
+            return;
+        }
+
+        $next = $message->channel?->failover();
+
+        if ($next === null || $message->body === null || $message->isExpired()) {
+            return;
+        }
+
+        $this->queue(
+            to: $message->to,
+            body: $message->body,
+            purpose: $message->purpose,
+            // الأجل موروث لا مُجدَّد: ما بقي من عمر الرمز هو ما بقي
+            expiresAt: $message->expires_at,
+            channel: $next,
+            failedOverFrom: $message->id,
+        );
     }
 
     /**
@@ -221,7 +366,13 @@ final class SmsOutbox
     {
         $max = (int) config('sms.max_attempts', 3);
 
-        // المستنفَدة أولاً: بعد الاستعادة تصير `queued` فلا يميّزها شيء
+        // المستنفَدة أولاً: بعد الاستعادة تصير `queued` فلا يميّزها شيء.
+        // وتُقرأ قبل التحديث لأن التراجع يحتاج أجسادها وقنواتها
+        $dying = SmsMessage::query()
+            ->staleClaim()
+            ->where('attempts', '>=', $max)
+            ->get();
+
         $exhausted = SmsMessage::query()
             ->staleClaim()
             ->where('attempts', '>=', $max)
@@ -256,10 +407,17 @@ final class SmsOutbox
                 'updated_at' => now(),
             ]);
 
+        // التراجع بعد وسم الأصل `failed` لا قبله: لو سبقه لرأى `failOver`
+        // الحالة القديمة، ولاحتُسب الصفّ الجديد ثم أُعيد وسم الأصل فوقه
+        foreach ($dying as $message) {
+            $this->failOver($message->fresh());
+        }
+
         return [
             'reclaimed' => $reclaimed,
             'exhausted' => $exhausted,
             'expired' => $expired,
+            'failed_over' => $dying->count(),
         ];
     }
 

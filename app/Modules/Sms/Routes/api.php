@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Api\Http\Middleware\ForceJsonResponse;
+use App\Modules\Sms\Http\Controllers\ChallengeController;
 use App\Modules\Sms\Http\Controllers\SmsWorkerController;
 use App\Modules\Sms\Http\Middleware\AuthenticateSmsWorker;
 use Illuminate\Support\Facades\Route;
@@ -39,5 +40,23 @@ Route::prefix('v1/sms')
 
         Route::post('/confirm', [SmsWorkerController::class, 'confirm'])->name('confirm');
 
+        // القناة العكسية: الهاتف يرفع ما وصله مطابقاً للبادئة وحده
+        Route::post('/inbound', [SmsWorkerController::class, 'inbound'])->name('inbound');
+
         Route::get('/health', [SmsWorkerController::class, 'health'])->name('health');
+    });
+
+/*
+| تحدّي التوثيق العكسي للتطبيق.
+|
+| خارج مجموعة العامل: هذه نقطة **مستخدم** لا نقطة هاتف — تُحرَس برمز
+| Sanctum الشخصي، والتحدّي يُصدَر لصاحب الرمز لا لرقمٍ في الجسد.
+| وخلطها بمجموعة العامل كان سيعني أن سرّ الهاتف يُصدر تحدّيات لأي حساب.
+*/
+
+Route::prefix('v1/sms')
+    ->name('api.v1.sms.')
+    ->middleware([ForceJsonResponse::class, 'auth:sanctum', 'throttle:api-write'])
+    ->group(function (): void {
+        Route::post('/challenge', [ChallengeController::class, 'issue'])->name('challenge');
     });

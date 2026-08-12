@@ -54,6 +54,19 @@
             أرسل رمزاً جديداً
         </button>
     </form>
+
+    {{-- مخرجٌ حين لا تصل الرسالة: يرسل المستخدم إلينا بدل أن ننتظر وصول
+         رمزٍ إليه. والشرط Route::has لا اسم وحدة: القناة تعيش في وحدة
+         مؤقتة تُحذف كاملةً، وحذفها يُخفي هذا الرابط وحده بلا أن يمسّ
+         شيئاً في هذه الصفحة. --}}
+    @if (Route::has('sms.challenge'))
+        <p class="mt-6 text-center text-sm text-muted">
+            لم تصلك الرسالة؟
+            <a href="{{ route('sms.challenge') }}" class="font-medium text-brand-dark underline">
+                وثّق بإرسال رسالة منك
+            </a>
+        </p>
+    @endif
 </div>
 
 @endsection

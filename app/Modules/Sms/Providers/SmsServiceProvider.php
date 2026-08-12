@@ -3,17 +3,24 @@
 namespace App\Modules\Sms\Providers;
 
 use App\Modules\Identity\Contracts\PhoneVerificationSender;
+use App\Modules\Sms\Console\DispatchQueuedCommand;
 use App\Modules\Sms\Console\PruneSmsCommand;
 use App\Modules\Sms\Console\ReapSmsCommand;
 use App\Modules\Sms\Console\SmsStatusCommand;
 use App\Modules\Sms\Console\SmsTokenCommand;
+use App\Modules\Sms\Contracts\WhatsAppTransport;
 use App\Modules\Sms\Senders\OutboxSender;
+use App\Modules\Sms\Services\ChallengeVerifier;
 use App\Modules\Sms\Services\SmsOutbox;
+use App\Modules\Sms\Transports\CloudApiWhatsAppTransport;
+use App\Modules\Sms\Transports\HttpBridgeWhatsAppTransport;
+use App\Modules\Sms\Transports\LogWhatsAppTransport;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 use RuntimeException;
 
 /**
@@ -53,10 +60,36 @@ class SmsServiceProvider extends ServiceProvider
         // singleton: الطابور بلا حالة، والنسخة الواحدة تكفي — ونداء
         // واحد قد يسحب ويؤكّد ويحصي
         $this->app->singleton(SmsOutbox::class);
+        $this->app->singleton(ChallengeVerifier::class);
+
+        $this->registerWhatsAppTransport();
 
         if ((bool) config('sms.enabled', false)) {
             $this->app->bind(PhoneVerificationSender::class, OutboxSender::class);
         }
+    }
+
+    /**
+     * السائق يُرمى عند اسم مجهول — نفس قاعدة NotificationsServiceProvider.
+     *
+     * لا `default => LogWhatsAppTransport`: خطأ إملائي في WHATSAPP_DRIVER
+     * يجب أن يوقف الإقلاع لا أن يهبط بصمت إلى سائق يكتب في السجلّ.
+     * خادمُ إنتاجٍ يبدو عاملاً ولا تصل منه رسالة واحدة هو أسوأ الحالتين.
+     */
+    private function registerWhatsAppTransport(): void
+    {
+        $this->app->bind(WhatsAppTransport::class, function (): WhatsAppTransport {
+            $driver = (string) config('sms.whatsapp.driver', 'log');
+
+            return match ($driver) {
+                'log' => new LogWhatsAppTransport,
+                'cloud' => new CloudApiWhatsAppTransport,
+                'http' => new HttpBridgeWhatsAppTransport,
+                default => throw new InvalidArgumentException(
+                    "سائق واتساب غير معروف: {$driver}. القيم المقبولة: log, cloud, http."
+                ),
+            };
+        });
     }
 
     public function boot(): void
@@ -71,6 +104,7 @@ class SmsServiceProvider extends ServiceProvider
             $this->commands([
                 ReapSmsCommand::class,
                 PruneSmsCommand::class,
+                DispatchQueuedCommand::class,
                 SmsStatusCommand::class,
                 SmsTokenCommand::class,
             ]);
@@ -99,6 +133,24 @@ class SmsServiceProvider extends ServiceProvider
             throw new RuntimeException(
                 'SMS_WORKER_TOKEN قصير جداً. الحدّ الأدنى 32 محرفاً — '
                 .'السرّ يحرس طابوراً فيه رموز توثيق.'
+            );
+        }
+
+        /**
+         * https شرطٌ في الإنتاج لا توصية.
+         *
+         * الهاتف يرسل السرّ في ترويسة كل نداء، والاستجابة تحمل رموز
+         * توثيق صريحة. وعلى http يقرأ الاثنين كلُّ وسيط بين الهاتف
+         * والخادم — ونداءٌ كل خمس ثوانٍ يعني أن السرّ يمرّ آلاف المرات
+         * في اليوم.
+         *
+         * والفحص على APP_URL لا على الطلب: الأمر يقع عند الإقلاع، وقبل
+         * أن يصل نداءٌ واحد. فالخطأ يظهر عند النشر لا بعد أسبوع.
+         */
+        if (app()->environment('production') && ! str_starts_with((string) config('app.url'), 'https://')) {
+            throw new RuntimeException(
+                'وحدة الرسائل مُفعَّلة على APP_URL بلا https. '
+                .'سرّ العامل ورموز التوثيق تمرّ مكشوفة — اضبط شهادة قبل التشغيل.'
             );
         }
     }

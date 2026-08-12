@@ -45,6 +45,16 @@ final class OutboxSender implements PhoneVerificationSender
          */
         $ttl = (int) config('identity.phone_verification.ttl_minutes', 10);
 
+        /**
+         * القناة تُترك لـ`queue` تقرّرها.
+         *
+         * `preferredChannelFor` يقرأ تاريخ هذا الرقم: إن كانت آخر
+         * محاولاته على القناة الافتراضية كلها فاشلة، بدأ من البديلة
+         * مباشرةً بدل أن يحرق ثلاث محاولات وينتظر التراجع في كل مرة.
+         *
+         * وتمرير قناةٍ صريحة هنا كان سيُلغي ذلك التعلّم — فيبقى الرقم
+         * المحظور يُجرَّب على SMS إلى الأبد.
+         */
         $this->outbox->queue(
             to: $phone,
             body: $this->body($code),

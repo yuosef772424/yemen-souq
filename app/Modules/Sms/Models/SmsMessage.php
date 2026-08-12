@@ -2,6 +2,7 @@
 
 namespace App\Modules\Sms\Models;
 
+use App\Modules\Sms\Enums\DeliveryChannel;
 use App\Modules\Sms\Enums\SmsStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -24,6 +25,7 @@ class SmsMessage extends Model
         'to',
         'body',
         'purpose',
+        'channel',
         'expires_at',
     ];
 
@@ -31,6 +33,7 @@ class SmsMessage extends Model
     {
         return [
             'status' => SmsStatus::class,
+            'channel' => DeliveryChannel::class,
             'attempts' => 'integer',
             'claimed_at' => 'datetime',
             'claim_expires_at' => 'datetime',
@@ -48,9 +51,11 @@ class SmsMessage extends Model
      * ميتة ويرسل رمزاً لن يعمل. الشرط الزمني صحيح دائماً بلا اعتماد على
      * مجدول.
      */
-    public function scopeClaimable(Builder $query): Builder
+    public function scopeClaimable(Builder $query, DeliveryChannel $channel): Builder
     {
         return $query
+            // القناة أولاً لتطابق ترتيب الفهرس sms_channel_claim_idx
+            ->where('channel', $channel)
             ->where('status', SmsStatus::Queued)
             ->where(function (Builder $inner): void {
                 $inner->whereNull('expires_at')->orWhere('expires_at', '>', now());

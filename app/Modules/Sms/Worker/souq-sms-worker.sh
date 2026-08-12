@@ -122,7 +122,8 @@ send_one() {
 tick() {
     local claim messages token results one id to body status error rc
 
-    claim=$(call POST /claim "{\"worker\":\"$SOUQ_SMS_WORKER\"}") || return $?
+    # القناة صريحة: الهاتف يسحب sms وحدها — واتساب يدفعه الخادم
+    claim=$(call POST /claim "{\"worker\":\"$SOUQ_SMS_WORKER\",\"channel\":\"sms\"}") || return $?
 
     token=$(printf '%s' "$claim" | jq -r '.claim_token // empty')
 
@@ -171,6 +172,64 @@ tick() {
     return 0
 }
 
+# ═══════════════════════════════════════════════════════════════════════
+# القناة العكسية: رفع ما وصل الهاتف
+# ═══════════════════════════════════════════════════════════════════════
+#
+# ═══ يُرشَّح على الهاتف قبل أن يُرفع ═══
+#
+# صندوق الوارد فيه رسائل بنوك وأهل وعمل. ورفعُه كاملاً إلى الخادم تسريبٌ
+# لا علاقة له بالتوثيق — ولا يُصلحه أن الخادم «يتجاهل ما لا يعنيه»، لأن
+# التسريب وقع بالنقل لا بالمعالجة.
+#
+# فلا يُرفع إلا ما يطابق البادئة تماماً. وهذا أيضاً يمنع التقاط رمز مصرفٍ
+# من ستّ خانات وصل مصادفةً في نفس الدقيقة.
+#
+# ═══ والموضع يُحفَظ على القرص ═══
+#
+# بلا ملف الموضع تُرفَع نفس الرسالة في كل دورة. والخادم يتحمّل التكرار
+# (التحدّي يُستهلك مرة) لكنه نداءٌ بلا فائدة كل خمس ثوانٍ — وعلى بيانات
+# جوّال ذلك ليس مجاناً.
+
+STATE="${SOUQ_SMS_STATE:-$HOME/.souq-sms.seen}"
+
+forward_inbound() {
+    [ "${SOUQ_SMS_INBOUND:-1}" = "1" ] || return 0
+    command -v termux-sms-list >/dev/null 2>&1 || return 0
+
+    local prefix seen inbox payload count
+    prefix="${SOUQ_SMS_PREFIX:-SQ}"
+    seen=$(cat "$STATE" 2>/dev/null || echo 0)
+
+    inbox=$(termux-sms-list -t inbox -l 25 2>/dev/null) || return 0
+    [ -z "$inbox" ] && return 0
+
+    # الترشيح كله في jq: البادئة، والأحدث من آخر موضع، والحقول الثلاثة
+    # وحدها — فلا يغادر الهاتف نصٌّ لا يطابق
+    payload=$(printf '%s' "$inbox" | jq -c \
+        --arg p "$prefix" \
+        --argjson seen "$seen" \
+        '[ .[]
+           | select((._id // 0) > $seen)
+           | select(.body != null and (.body | ascii_upcase | test("(^|[^A-Z])" + ($p | ascii_upcase) + "[ \\-_:]*[A-Z0-9]{6}")))
+           | {from: .number, body: .body, received_at: (.received // "")} ]' 2>/dev/null) || return 0
+
+    count=$(printf '%s' "$payload" | jq 'length' 2>/dev/null || echo 0)
+
+    if [ "${count:-0}" -gt 0 ]; then
+        if call POST /inbound "$(jq -nc --argjson m "$payload" '{messages: $m}')" >/dev/null; then
+            log "↑ رُفعت $count رسالة واردة"
+        else
+            # الموضع لا يتقدّم عند الفشل — تُعاد المحاولة في الدورة التالية
+            return 0
+        fi
+    fi
+
+    # الموضع يتقدّم إلى أحدث معرّف **رآه المرشّح**، لا إلى ما رُفع وحده:
+    # وإلا أُعيد فحص كل رسالة غير مطابقة في كل دورة إلى الأبد
+    printf '%s' "$inbox" | jq '[.[]._id // 0] | max // 0' > "$STATE" 2>/dev/null || true
+}
+
 log "بدأ العامل: $SOUQ_SMS_WORKER → $API"
 
 # قفل الاستيقاظ من داخل السكربت أيضاً: نسيانه هو العطل الأول، وتذكيرٌ
@@ -181,6 +240,10 @@ trap 'command -v termux-wake-unlock >/dev/null 2>&1 && termux-wake-unlock; log "
 backoff="$SOUQ_SMS_POLL"
 
 while true; do
+    # الرفع أولاً: توثيقٌ ينتظر رسالةً وصلت الهاتف أهمّ من رسالةٍ لم
+    # تخرج بعد — والأولى يقف صاحبها أمام الشاشة الآن
+    forward_inbound
+
     if tick; then
         # النجاح يعيد الفاصل إلى أصله
         backoff="$SOUQ_SMS_POLL"

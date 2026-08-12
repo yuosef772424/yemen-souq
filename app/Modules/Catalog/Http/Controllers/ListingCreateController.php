@@ -8,7 +8,6 @@ use App\Modules\Catalog\Http\Requests\StoreListingRequest;
 use App\Modules\Catalog\Models\Listing;
 use App\Modules\Catalog\Services\ListingAttributes;
 use App\Modules\Catalog\Services\ListingImageService;
-use App\Modules\Identity\Support\DemoUser;
 use App\Modules\Shared\Models\Category;
 use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Models\Location;
@@ -42,8 +41,7 @@ class ListingCreateController
         $listing = DB::transaction(function () use ($request): Listing {
             $listing = Listing::create([
                 ...$request->safe()->except('images', 'attributes'),
-                'user_id' => DemoUser::current()->id,
-                'sale_type' => 'direct',
+                'user_id' => $request->user()->id,
                 'status' => 'active',
                 'published_at' => now(),
                 'expires_at' => now()->addDays(30),

@@ -221,8 +221,9 @@ class NotifierTest extends TestCase
         $this->assertLessThanOrEqual(180, mb_strlen(AppNotification::firstOrFail()->title));
     }
 
+    /** الرسالة النصية والبريد منفَّذتان اليوم — التفضيل وحده يقرر، لا تنفيذٌ ناقص */
     #[Test]
-    public function an_unimplemented_channel_is_refused_even_when_the_preference_allows_it(): void
+    public function an_implemented_channel_is_allowed_when_the_preference_allows_it(): void
     {
         app(PreferenceResolver::class)->save(
             $this->recipient,
@@ -232,8 +233,8 @@ class NotifierTest extends TestCase
 
         $resolver = app(PreferenceResolver::class);
 
-        $this->assertFalse($resolver->allows($this->recipient, NotificationType::NewMessage, Channel::Sms));
-        $this->assertFalse($resolver->allows($this->recipient, NotificationType::NewMessage, Channel::Email));
+        $this->assertTrue($resolver->allows($this->recipient, NotificationType::NewMessage, Channel::Sms));
+        $this->assertTrue($resolver->allows($this->recipient, NotificationType::NewMessage, Channel::Email));
     }
 
     /**

@@ -5,7 +5,9 @@ namespace App\Modules\Notifications\Services;
 use App\Models\User;
 use App\Modules\Notifications\Enums\Channel;
 use App\Modules\Notifications\Enums\NotificationType;
+use App\Modules\Notifications\Jobs\DeliverEmail;
 use App\Modules\Notifications\Jobs\DeliverPush;
+use App\Modules\Notifications\Jobs\DeliverSms;
 use App\Modules\Notifications\Models\AppNotification;
 use Illuminate\Support\Str;
 
@@ -70,6 +72,21 @@ final class Notifier
         $notification = $this->record($recipient, $type, $title, $body, $data);
 
         $this->push($recipient, $notification);
+
+        /**
+         * السطر التالي وحده لا وسيطاً في coolingDown: SMS والبريد لا
+         * تهدئة زمنية لهما، بل شرط أبسط — القناتان تُطلَقان مع أول
+         * صفٍّ جديد فقط، لا مع كل طيّ فوقه.
+         *
+         * محادثة فيها أربعون رسالة غير مقروءة تطوي على صفٍّ واحد
+         * (NotificationType::collapses)، ولو أطلقت SMS مع كل رسالة لكلّف
+         * ذلك أربعين رسالة نصية حقيقية على حدث واحد يراه المستخدم صفاً
+         * واحداً. wasRecentlyCreated يميّز الإنشاء عن الطيّ بلا عمود إضافي.
+         */
+        if ($notification->wasRecentlyCreated) {
+            $this->sms($recipient, $notification);
+            $this->email($recipient, $notification);
+        }
 
         return $notification;
     }
@@ -181,5 +198,35 @@ final class Notifier
         $cooldown = (int) config('notifications.push.cooldown_seconds', 60);
 
         return $notification->sent_at->diffInSeconds(now()) < $cooldown;
+    }
+
+    /**
+     * إرسال رسالة نصية — بشرط رابع فوق شرطي الإجبار والتنفيذ في allows.
+     *
+     * الرقم غير الموثَّق لا يكفي كونه ملكاً لصاحب الحساب: صفّ تغيير الرقم
+     * في AccountController يصفّر phone_verified_at فور الحفظ، فيبقى الرقم
+     * الجديد في العمود قبل أن يُثبَت صاحبه — ورسالة نصية إليه في تلك
+     * النافذة تصل رقماً قد لا يملكه بعد.
+     */
+    private function sms(User $recipient, AppNotification $notification): void
+    {
+        if (! $this->preferences->allows($recipient, $notification->type, Channel::Sms)) {
+            return;
+        }
+
+        if (! $recipient->hasVerifiedPhone()) {
+            return;
+        }
+
+        DeliverSms::dispatch($notification->id, $recipient->phone);
+    }
+
+    private function email(User $recipient, AppNotification $notification): void
+    {
+        if (! $this->preferences->allows($recipient, $notification->type, Channel::Email)) {
+            return;
+        }
+
+        DeliverEmail::dispatch($notification->id, $recipient->email);
     }
 }

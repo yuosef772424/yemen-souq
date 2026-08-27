@@ -3,12 +3,14 @@
 namespace App\Modules\Sms\Providers;
 
 use App\Modules\Identity\Contracts\PhoneVerificationSender;
+use App\Modules\Notifications\Contracts\SmsSender;
 use App\Modules\Sms\Console\DispatchQueuedCommand;
 use App\Modules\Sms\Console\PruneSmsCommand;
 use App\Modules\Sms\Console\ReapSmsCommand;
 use App\Modules\Sms\Console\SmsStatusCommand;
 use App\Modules\Sms\Console\SmsTokenCommand;
 use App\Modules\Sms\Contracts\WhatsAppTransport;
+use App\Modules\Sms\Senders\NotificationSmsSender;
 use App\Modules\Sms\Senders\OutboxSender;
 use App\Modules\Sms\Services\ChallengeVerifier;
 use App\Modules\Sms\Services\SmsOutbox;
@@ -27,17 +29,19 @@ use RuntimeException;
 /**
  * الموفّر يفعل ثلاثة أشياء لا يغطّيها الاكتشاف — وأولها هو كل الوحدة.
  *
- * ═══ ١. الاستيلاء على قناة رموز التحقق ═══
+ * ═══ ١. الاستيلاء على قناتين، بنفس السطر المتكرّر ═══
  *
- * سطرٌ واحد: ربط `PhoneVerificationSender` بـ`OutboxSender`.
+ * ربط `PhoneVerificationSender` بـ`OutboxSender`، وربط `SmsSender`
+ * (عقد وحدة الإشعارات) بـ`NotificationSmsSender`. كلاهما يكتب في نفس
+ * الطابور بفرق الغرض وحده — `phone_verification` مقابل `notification`.
  *
- * وهو **كل** ما يصل هذه الوحدة بالنظام. `PhoneVerificationService` بانيها
- * `?PhoneVerificationSender $sender = null`، فالحاوية تحقن الواجهة متى
- * كانت مربوطة وتقع إلى `null` متى لم تكن — ويعود القرار إلى `config`
+ * وهو **كل** ما يصل هذه الوحدة بالنظامين. `PhoneVerificationService`
+ * و`DeliverSms` بانيَيهما معاملٌ اختياري بواجهة، فالحاوية تحقن التنفيذ
+ * متى كان مربوطاً وتقع إلى `null` متى لم يكن — ويعود القرار إلى `config`
  * كما كان.
  *
- * ولهذا حذف `app/Modules/Sms` يُرجع النظام إلى ما قبلها بلا تعديل حرف
- * في وحدة الهوية. وهذا هو الشرط الذي طُلبت الوحدة لأجله.
+ * ولهذا حذف `app/Modules/Sms` يُرجع النظامين إلى ما قبلها بلا تعديل حرف
+ * في وحدة الهوية أو وحدة الإشعارات. وهذا هو الشرط الذي طُلبت الوحدة لأجله.
  *
  * ═══ ٢. الرفض عند إعداد ناقص ═══
  *
@@ -67,6 +71,7 @@ class SmsServiceProvider extends ServiceProvider
 
         if ((bool) config('sms.enabled', false)) {
             $this->app->bind(PhoneVerificationSender::class, OutboxSender::class);
+            $this->app->bind(SmsSender::class, NotificationSmsSender::class);
         }
     }
 

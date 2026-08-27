@@ -10,9 +10,9 @@ namespace App\Modules\Notifications\Enums;
  * فاسم القناة هو اسم العمود. البديل — خريطة تحويل — يعني موضعاً ثانياً
  * يجب أن يُعدَّل عند إضافة قناة، ونسيانه يُسقط القناة الجديدة بصمت.
  *
- * Sms وEmail معلَنتان وغير موصولتين: العمودان موجودان في الجدول منذ
- * الهجرة الأولى، وحذفهما من هذا التعداد يجعل الجدول يَعِد بما لا يعرفه
- * الكود. الافتراضي لهما false في كل نوع — انظر NotificationType::defaultFor.
+ * والأربع كلها منفَّذة اليوم — انظر Notifier::sms وNotifier::email. وكلا
+ * القناتين الجديدتين افتراضيها false في كل نوع رغم ذلك: انظر
+ * NotificationType::defaultFor لسبب الإطفاء الذي لا علاقة له بالتنفيذ.
  */
 enum Channel: string
 {
@@ -34,6 +34,23 @@ enum Channel: string
     /** القنوات التي لها تنفيذ فعلي اليوم */
     public function isImplemented(): bool
     {
-        return $this === self::InApp || $this === self::Push;
+        return true;
+    }
+
+    /**
+     * ترتيب البلوغ — لعمود channel في app_notifications وحده.
+     *
+     * ذاك العمود ليس «أين يُعرض» بل «أبعد قناة بلغها الإشعار»، والرسالة
+     * النصية والبريد يبلغان صاحبهما خارج التطبيق كلياً — أبعد من دفعٍ
+     * يحتاج تطبيقاً مثبَّتاً وإذناً ممنوحاً. AppNotification::markDelivered
+     * يستعمل هذا الترتيب ليمنع قناةً أقرب من إخفاء سجلّ قناة أبعد سبقتها.
+     */
+    public function reach(): int
+    {
+        return match ($this) {
+            self::InApp => 0,
+            self::Push => 1,
+            self::Sms, self::Email => 2,
+        };
     }
 }

@@ -76,12 +76,8 @@ class DeliverPush implements ShouldQueue
             $devices->pruneTokens($dead);
         }
 
-        // channel = push معناه «بلغ أبعد من داخل التطبيق»، وsent_at ذاكرة
-        // التهدئة في Notifier. الاثنان معاً يجعلان الجدول قابلاً للسؤال:
-        // كم إشعاراً بقي بلا تسليم؟
-        $notification->forceFill([
-            'channel' => Channel::Push,
-            'sent_at' => now(),
-        ])->save();
+        // sent_at ذاكرة التهدئة في Notifier، وchannel أبعد قناة بلغها —
+        // markDelivered يحمي الثاني من التراجع لو سبقته sms أو email
+        $notification->markDelivered(Channel::Push);
     }
 }

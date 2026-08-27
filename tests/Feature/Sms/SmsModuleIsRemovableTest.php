@@ -4,9 +4,11 @@ namespace Tests\Feature\Sms;
 
 use App\Modules\Identity\Contracts\PhoneVerificationSender;
 use App\Modules\Identity\Services\PhoneVerificationService;
+use App\Modules\Notifications\Contracts\SmsSender;
 use App\Modules\Sms\Enums\SmsStatus;
 use App\Modules\Sms\Models\SmsMessage;
 use App\Modules\Sms\Providers\SmsServiceProvider;
+use App\Modules\Sms\Senders\NotificationSmsSender;
 use App\Modules\Sms\Senders\OutboxSender;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -17,14 +19,15 @@ use Tests\TestCase;
  *
  * ═══ ما يحرسه هذا الملف ═══
  *
- * أن الوصلة بين `Sms` و`Identity` سطرٌ واحد في الحاوية، لا تعديلٌ في
- * وحدة الهوية. فحذف `app/Modules/Sms` يُرجع النظام إلى ما قبله بلا أن
- * يُلمس حرف هناك.
+ * أن الوصلتين — `Sms` مع `Identity` لرموز التوثيق، و`Sms` مع
+ * `Notifications` لقناة الإشعار النصي — سطران في الحاوية، لا تعديلٌ في
+ * أيّ من الوحدتين الأخريين. فحذف `app/Modules/Sms` يُرجع النظام إلى ما
+ * قبله بلا أن يُلمس حرف في أيّ منهما.
  *
  * والاختبار الأول هو الحارس الفعلي: لو أضاف أحدهم يوماً `'termux'` إلى
  * الـ`match` في `PhoneVerificationService::sender()` لصار الحذف يكسر
- * الهوية — والاختبار لا يفشل. فالثاني يسدّ ذلك: يقرأ الملف ويتأكد أنه
- * لا يذكر وحدة `Sms` إطلاقاً.
+ * الهوية — والاختبار لا يفشل. فالثالث يسدّ ذلك من جهة الإشعارات: يقرأ
+ * الملفات ويتأكد أنها لا تذكر وحدة `Sms` إطلاقاً.
  */
 class SmsModuleIsRemovableTest extends TestCase
 {
@@ -68,6 +71,69 @@ class SmsModuleIsRemovableTest extends TestCase
         $this->assertSame('+967771234567', $message->to);
         $this->assertSame('phone_verification', $message->purpose);
         $this->assertSame(SmsStatus::Queued, $message->status);
+    }
+
+    /**
+     * نفس الشرط على قناة الإشعارات — الرابط الثاني الذي يربطه هذا الموفّر.
+     *
+     * مطفأةً: `DeliverSms` تجد `SmsSender` غير مربوط، فتخرج بهدوء. وهذا هو
+     * ما يحدث بالضبط عند حذف المجلد.
+     */
+    #[Test]
+    public function with_the_module_off_the_notification_sms_channel_has_no_binding(): void
+    {
+        $this->assertFalse(app()->bound(SmsSender::class));
+    }
+
+    /** مُفعَّلةً: تستولي على قناة الإشعارات أيضاً، بغرضٍ يميّزها عن رمز التحقق */
+    #[Test]
+    public function with_the_module_on_a_notification_sms_goes_to_the_same_outbox(): void
+    {
+        $this->enableModule();
+
+        $this->assertInstanceOf(NotificationSmsSender::class, app(SmsSender::class));
+
+        app(SmsSender::class)->send('+967771234567', 'ردّ عليك أحدهم');
+
+        $message = SmsMessage::sole();
+
+        $this->assertSame('+967771234567', $message->to);
+        $this->assertSame('notification', $message->purpose);
+        $this->assertSame(SmsStatus::Queued, $message->status);
+    }
+
+    /**
+     * الحارس ضد الارتداد من الجهة الأخرى: وحدة الإشعارات لا تذكر وحدة الرسائل.
+     *
+     * نفس حجّة identity_never_names_the_sms_module — الوصلة المسموحة
+     * الوحيدة ربط SmsSender في SmsServiceProvider، لا استيراد مباشر.
+     */
+    #[Test]
+    public function notifications_never_names_the_sms_module(): void
+    {
+        $root = __DIR__.'/../../../app/Modules/Notifications';
+
+        $offenders = [];
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS)
+        );
+
+        foreach ($iterator as $file) {
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+
+            if (str_contains(file_get_contents($file->getPathname()), 'App\\Modules\\Sms')) {
+                $offenders[] = basename($file->getPathname());
+            }
+        }
+
+        $this->assertSame([], $offenders, implode("\n", array_merge(
+            ['وحدة الإشعارات تذكر وحدة الرسائل — فحذف الثانية يكسر الأولى.'],
+            $offenders,
+            ['', 'الوصلة الوحيدة المسموحة: ربط SmsSender في SmsServiceProvider.']
+        )));
     }
 
     /**

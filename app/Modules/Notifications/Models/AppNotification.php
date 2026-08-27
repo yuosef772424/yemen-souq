@@ -100,6 +100,27 @@ class AppNotification extends Model
     }
 
     /**
+     * تسجيل نجاح التسليم على قناة خارج التطبيق — الدفع أو الرسالة أو البريد.
+     *
+     * ثلاث مهامّ منفصلة (DeliverPush وDeliverSms وDeliverEmail) قد تنجح
+     * على نفس الصفّ، وكلها تتسابق على عمودين: channel وsent_at. المقارنة
+     * بـ`reach()` تمنع قناةً أقرب انتهت متأخرةً من الكتابة فوق سجلّ قناة
+     * أبعد سبقتها — لولاها لأمكن لبريدٍ فشل ثم دفعٍ نجح أن «يُنزل» الصفّ
+     * من email إلى push رغم أن البريد وصل فعلاً.
+     */
+    public function markDelivered(Channel $channel): void
+    {
+        if ($this->channel !== null && $channel->reach() < $this->channel->reach()) {
+            return;
+        }
+
+        $this->forceFill([
+            'channel' => $channel,
+            'sent_at' => now(),
+        ])->save();
+    }
+
+    /**
      * وجهة النقر.
      *
      * تُقرأ من الحمولة لا تُشتقّ من النوع: الرابط يُبنى لحظة الإنشاء حيث

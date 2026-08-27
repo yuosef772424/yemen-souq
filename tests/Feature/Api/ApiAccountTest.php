@@ -167,11 +167,10 @@ class ApiAccountTest extends TestCase
             ->assertJsonCount(count(NotificationType::cases()), 'data')
             ->assertJsonPath('data.0.type', NotificationType::NewMessage->value)
             ->assertJsonPath('data.0.label', NotificationType::NewMessage->label())
-            ->assertJsonPath('data.0.channels.push', true);
-
-        // القنوات غير المنفَّذة لا تُعرض — مربّعٌ لا يصل بعده شيء عطلٌ ظاهر
-        $this->getJson(route('api.v1.me.notification-preferences'), $this->auth())
-            ->assertJsonMissingPath('data.0.channels.sms');
+            ->assertJsonPath('data.0.channels.push', true)
+            // الأربع منفَّذة اليوم — sms وemail مطفأتان افتراضياً لا غائبتان
+            ->assertJsonPath('data.0.channels.sms', false)
+            ->assertJsonPath('data.0.channels.email', false);
     }
 
     #[Test]

@@ -22,6 +22,7 @@
 | [`architecture/sms-outbox.md`](architecture/sms-outbox.md) | طابور الرسائل: السحب الذرّي، الحراسة، عامل تيرمكس، وكيف تُحذف الوحدة |
 | [`architecture/schema.md`](architecture/schema.md) | كل جدول وكل حقل: لماذا يوجد — وتحليل ما يُدمَج وما لا يُدمَج |
 | [`architecture/removed-schema.md`](architecture/removed-schema.md) | ما حُذف من السكيمة، ولماذا، وتعريفه كاملاً لإعادته |
+| [`architecture/deployment.md`](architecture/deployment.md) | النشر: الخدمات الثلاث، مصائد البناء، وقرص الصور |
 | [`data-import/amazon-dataset-compatibility.md`](data-import/amazon-dataset-compatibility.md) | فحص توافق داتاسيت Amazon مع السكيمة |
 
 ## القاعدة

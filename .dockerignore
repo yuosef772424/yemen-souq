@@ -1,0 +1,43 @@
+# ما لا يدخل الصورة.
+#
+# `.env` أولاً وأهمها: نسخُه إلى الصورة يضع أسرار التطوير في طبقةٍ تُدفع
+# إلى سجلّ الصور — ويطغى على متغيّرات البيئة التي تحقنها المنصة، فتعمل
+# الصورة بإعداد جهازك المحلي على خادم الإنتاج.
+
+.env
+.env.*
+!.env.example
+
+.git
+.github
+.claude
+.idea
+.vscode
+
+node_modules
+vendor
+
+# تُبنى في مرحلة الأصول لا تُنسخ من الجهاز
+public/build
+public/hot
+
+# رابط رمزي يُنشأ عند الإقلاع
+public/storage
+
+storage/logs/*
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/pail
+
+tests
+phpunit.xml
+.phpunit.result.cache
+.phpunit.cache
+
+*.md
+!README.md
+
+database/*.sqlite
+Dockerfile
+.dockerignore

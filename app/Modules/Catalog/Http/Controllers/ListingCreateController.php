@@ -27,8 +27,12 @@ class ListingCreateController
     {
         return view('catalog::create', [
             'currencies' => Currency::active()->get(),
-            'categories' => Category::active()->roots()->with('children')->get(),
-            'governorates' => Location::active()->governorates()->with('children')->get(),
+            // النشر الجديد يعرض الفروع المفعَّلة وحدها — تعطيل تصنيف أو
+            // منطقة من لوحة الإدارة يخفيه من هنا فوراً، كما تَعِد الشاشة
+            // تلك بالضبط. بلا قيد الأبناء كانت `with('children')` تجلب
+            // كل فرع بصرف النظر عن حالته
+            'categories' => Category::active()->roots()->with(['children' => fn ($q) => $q->active()])->get(),
+            'governorates' => Location::active()->governorates()->with(['children' => fn ($q) => $q->active()])->get(),
             'maxImages' => ListingImageService::MAX_PER_LISTING,
             'attributesByCategory' => $this->attributes->groupedByCategory(),
         ]);

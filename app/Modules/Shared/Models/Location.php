@@ -3,6 +3,7 @@
 namespace App\Modules\Shared\Models;
 
 use App\Modules\Shared\Services\ArabicNormalizer;
+use App\Modules\Shared\Services\Navigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;

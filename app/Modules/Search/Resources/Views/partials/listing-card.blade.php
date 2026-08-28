@@ -27,7 +27,7 @@
         @endif
     </div>
 
-    <div class="flex flex-1 flex-col p-3.5">
+    <div class="flex flex-1 flex-col p-3">
         <h3 class="line-clamp-2 text-sm font-semibold leading-snug">
             <a href="{{ route('listing.show', [$listing, ...$trackingParams]) }}" class="hover:underline">
                 {{ $listing->title }}
@@ -35,7 +35,7 @@
         </h3>
 
         {{-- السعر: الأصلي بارزاً كما أدخله المعلن، والقيمة الموحّدة تحته --}}
-        <div class="mt-2.5">
+        <div class="mt-2">
             <p class="text-base font-bold tabular-nums text-brand-dark">
                 {{ $listing->formattedPrice() }}
             </p>
@@ -47,7 +47,7 @@
             @endif
         </div>
 
-        <div class="mt-auto pt-3">
+        <div class="mt-auto pt-2.5">
             <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted">
                 <span>{{ $listing->location?->name_ar }}</span>
                 <span aria-hidden="true">·</span>

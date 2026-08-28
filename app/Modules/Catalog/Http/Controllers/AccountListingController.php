@@ -79,8 +79,24 @@ class AccountListingController
         return view('catalog::account.edit', [
             'listing' => $listing,
             'currencies' => Currency::active()->get(),
-            'categories' => Category::active()->roots()->with('children')->get(),
-            'governorates' => Location::active()->governorates()->with('children')->get(),
+            // نفس تقييد نموذج النشر — والفرع الحالي للإعلان يبقى معروضاً
+            // حتى لو عُطِّل بعد النشر، وإلا فتح التعديل وفقد صاحبه فرعه
+            // الأصلي بلا أن يغيّره هو.
+            //
+            // شرط الأب (parent_id) الذي يضيفه التحميل الشغوف يسبق هذا
+            // الإغلاق، وorWhere بلا تجميع كان سيهرب من ذلك القيد تماماً —
+            // فيُظهر فرعاً من تصنيف أبٍ آخر لمجرّد تطابق المعرّف. التجميع
+            // بقوس داخلي (where(fn) بدل orWhere مباشرة) هو ما يمنع ذلك.
+            'categories' => Category::active()->roots()
+                ->with(['children' => fn ($q) => $q->where(
+                    fn ($q2) => $q2->active()->orWhere('id', $listing->category_id)
+                )])
+                ->get(),
+            'governorates' => Location::active()->governorates()
+                ->with(['children' => fn ($q) => $q->where(
+                    fn ($q2) => $q2->active()->orWhere('id', $listing->location_id)
+                )])
+                ->get(),
             'maxImages' => ListingImageService::MAX_PER_LISTING,
             'remainingImages' => max(0, ListingImageService::MAX_PER_LISTING - $listing->images->count()),
 

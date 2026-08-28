@@ -5,6 +5,18 @@
 
 @section('content')
 
+@php
+    $recentThumb = $listing->images->first();
+    $recentViewItem = [
+        'id' => $listing->id,
+        'title' => $listing->title,
+        'price' => $listing->formattedPrice(),
+        'image' => $recentThumb ? asset('storage/' . ($recentThumb->thumb_path ?? $recentThumb->path)) : null,
+        'url' => route('listing.show', $listing),
+    ];
+@endphp
+<div x-data="rememberView(@js($recentViewItem))"></div>
+
 <nav aria-label="مسار التصفح" class="mb-4 text-xs text-muted">
     <ol class="flex flex-wrap items-center gap-1.5">
         <li><a href="{{ route('search') }}" class="hover:text-ink hover:underline">الرئيسية</a></li>

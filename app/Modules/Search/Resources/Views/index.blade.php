@@ -2,7 +2,11 @@
 
 @section('title', $criteria->hasQuery() ? "نتائج البحث عن {$criteria->query}" : 'تصفح الإعلانات')
 
-@php $matchMode = $matchMode ?? 'browse'; @endphp
+@php
+    $matchMode = $matchMode ?? 'browse';
+    $activeFilterCount = count($criteria->activeFilterKeys());
+    $showRecentlyViewed = ! $criteria->hasQuery() && $activeFilterCount === 0;
+@endphp
 
 @section('content')
 
@@ -23,23 +27,61 @@
         </button>
     </div>
 
-    <div class="mt-5 grid gap-6 lg:grid-cols-[280px_1fr]">
+    {{-- شوهدت مؤخراً: يظهر فقط عند التصفح الحر، لا داخل نتائج مفلترة — نفس عرف
+         أمازون وشي إن في إبقاء هذا الشريط للصفحة العامة لا نتائج بحث نشطة --}}
+    @if ($showRecentlyViewed)
+        <div x-data="recentlyViewed()" x-show="items.length > 0" x-cloak class="mt-5">
+            <h2 class="mb-2 text-sm font-semibold text-ink">شوهدت مؤخراً</h2>
+            <div class="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1">
+                <template x-for="item in items" :key="item.id">
+                    <a :href="item.url"
+                       class="block w-32 shrink-0 rounded-xl border border-line bg-white p-2 transition hover:border-ink/25">
+                        <div class="aspect-square overflow-hidden rounded-lg bg-tint">
+                            <img :src="item.image" :alt="item.title" x-show="item.image" class="size-full object-cover">
+                        </div>
+                        <p class="mt-1.5 line-clamp-2 text-xs font-medium leading-snug" x-text="item.title"></p>
+                        <p class="mt-0.5 text-xs font-bold tabular-nums text-brand-dark" x-text="item.price"></p>
+                    </a>
+                </template>
+            </div>
+        </div>
+    @endif
+
+    <div class="mt-5 grid gap-6 lg:grid-cols-[280px_1fr]" x-data="{ open: false }">
 
         {{-- ═══ الفلاتر ═══ --}}
         <aside>
-            <button type="button" @click="$refs.panel.classList.toggle('hidden')"
-                    class="mb-3 w-full rounded-xl border border-line bg-white px-4 py-3 text-start text-sm font-semibold lg:hidden">
-                تصفية النتائج
-            </button>
+            {{-- خلفية معتّمة: تُغلق اللوحة عند النقر خارجها، على الجوال فقط --}}
+            <div x-show="open" x-cloak x-transition.opacity @click="open = false"
+                 class="fixed inset-0 z-40 bg-black/40 lg:hidden"></div>
 
-            <div x-ref="panel" class="hidden space-y-5 lg:block">
+            {{-- ورقة سفلية على الجوال، شريط جانبي ثابت على سطح المكتب —
+                 نفس عنصر DOM الواحد، لا تكرار لحقول النموذج --}}
+            <div x-show="open" x-cloak
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-full"
+                 x-transition:enter-end="opacity-100 translate-y-0"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="opacity-100 translate-y-0"
+                 x-transition:leave-end="opacity-0 translate-y-full"
+                 class="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] space-y-5 overflow-y-auto rounded-t-2xl bg-white p-4 shadow-2xl lg:!static lg:!z-auto lg:!block lg:max-h-none lg:overflow-visible lg:rounded-2xl lg:bg-transparent lg:p-0 lg:shadow-none">
+                <div class="mb-1 flex items-center justify-between lg:hidden">
+                    <h2 class="text-base font-semibold">الفلاتر</h2>
+                    <button type="button" @click="open = false"
+                            class="rounded-lg p-2 text-muted transition hover:bg-tint" aria-label="إغلاق">
+                        ✕
+                    </button>
+                </div>
+
                 @include('search::partials.filters')
             </div>
         </aside>
 
         {{-- ═══ النتائج ═══ --}}
         <section>
-            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
+            {{-- شريط موحّد: عدّاد النتائج + زر التصفية (جوال) + الفرز، لاصق أثناء
+                 التمرير كما في منصات التسوّق الكبرى --}}
+            <div class="sticky top-[60px] z-20 -mx-4 flex flex-wrap items-center justify-between gap-3 border-b border-line bg-canvas/95 px-4 py-3 backdrop-blur sm:mx-0 sm:px-0">
                 <p class="text-sm text-muted">
                     <span class="font-semibold text-ink">{{ number_format($listings->total()) }}</span> إعلان
                     @if ($criteria->hasPriceFilter())
@@ -48,17 +90,31 @@
                     @endif
                 </p>
 
-                <label class="flex items-center gap-2 text-sm">
-                    <span class="text-muted">الترتيب</span>
-                    <select name="sort" onchange="this.form.submit()"
-                            class="rounded-lg border border-line bg-white py-1.5 pe-8 ps-2 text-sm focus:border-brand focus:outline-none">
-                        <option value="newest" @selected($criteria->sort === 'newest')>الأحدث</option>
-                        <option value="oldest" @selected($criteria->sort === 'oldest')>الأقدم</option>
-                        <option value="price_asc" @selected($criteria->sort === 'price_asc')>الأقل قيمة</option>
-                        <option value="price_desc" @selected($criteria->sort === 'price_desc')>الأعلى قيمة</option>
-                    </select>
-                </label>
+                <div class="flex items-center gap-2">
+                    <button type="button" @click="open = true"
+                            class="flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-sm font-medium transition hover:bg-tint lg:hidden">
+                        <span>تصفية</span>
+                        @if ($activeFilterCount > 0)
+                            <span class="grid size-4 place-items-center rounded-full bg-brand text-[10px] font-semibold text-white">
+                                {{ $activeFilterCount }}
+                            </span>
+                        @endif
+                    </button>
+
+                    <label class="flex items-center gap-2 rounded-lg border border-line bg-white py-1.5 pe-8 ps-3 text-sm">
+                        <span class="text-muted">الترتيب</span>
+                        <select name="sort" onchange="this.form.submit()"
+                                class="border-0 bg-transparent p-0 pe-1 text-sm font-medium text-ink focus:outline-none focus:ring-0">
+                            <option value="newest" @selected($criteria->sort === 'newest')>الأحدث</option>
+                            <option value="oldest" @selected($criteria->sort === 'oldest')>الأقدم</option>
+                            <option value="price_asc" @selected($criteria->sort === 'price_asc')>الأقل قيمة</option>
+                            <option value="price_desc" @selected($criteria->sort === 'price_desc')>الأعلى قيمة</option>
+                        </select>
+                    </label>
+                </div>
             </div>
+
+            @include('search::partials.active-filters')
 
             {{--
                 التراجع يُعلَن، ولا يُخفى.
@@ -108,7 +164,7 @@
                     </a>
                 </div>
             @else
-                <ul class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <ul class="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
                     @foreach ($listings as $i => $listing)
                         @include('search::partials.listing-card', [
                             'listing' => $listing,

@@ -150,5 +150,41 @@ Alpine.data('contactReveal', (listingId) => ({
     },
 }));
 
+/**
+ * «شوهدت مؤخراً»: تعمل بالكامل من طرف العميل عبر localStorage — بلا
+ * حساب وبلا استعلام خادم. الشكل المخزَّن (id/title/price/image/url) هو
+ * نفسه عقد الربط المستقبلي بحساب المستخدم إن احتاج المنتج ذلك لاحقاً.
+ */
+const RECENT_VIEWS_KEY = 'recently_viewed';
+const RECENT_VIEWS_LIMIT = 12;
+
+function readRecentViews() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(RECENT_VIEWS_KEY) ?? '[]');
+        return Array.isArray(stored) ? stored : [];
+    } catch {
+        return [];
+    }
+}
+
+/** تُستخدم في صفحة تفاصيل الإعلان لتسجيل زيارته */
+Alpine.data('rememberView', (item) => ({
+    init() {
+        if (!item?.id) {
+            return;
+        }
+
+        const list = readRecentViews().filter((existing) => existing.id !== item.id);
+        list.unshift(item);
+
+        localStorage.setItem(RECENT_VIEWS_KEY, JSON.stringify(list.slice(0, RECENT_VIEWS_LIMIT)));
+    },
+}));
+
+/** تُستخدم في صفحة التصفح لعرض القائمة المخزَّنة */
+Alpine.data('recentlyViewed', () => ({
+    items: readRecentViews(),
+}));
+
 window.Alpine = Alpine;
 Alpine.start();

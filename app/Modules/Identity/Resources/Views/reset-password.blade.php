@@ -14,9 +14,9 @@
 
     @if (session('demo_code'))
         <div role="status" class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-            <p class="font-semibold">بيئة تجريبية — لا رسائل تُرسَل فعلاً</p>
+            <p class="font-semibold">توصيل الرسائل النصية غير مُفعَّل حالياً — استخدم الرمز الظاهر أدناه</p>
             <p class="mt-2">الرمز: <span dir="ltr" class="text-lg font-bold tabular-nums">{{ session('demo_code') }}</span></p>
-            <p class="mt-2 text-xs">في الإنتاج يوصّل الرمز مزوّد رسائل ولا يظهر هنا إطلاقاً.</p>
+            <p class="mt-2 text-xs">حين يُفعَّل مزوّد الرسائل، يصل الرمز نصّاً ولا يظهر في الصفحة.</p>
         </div>
     @endif
 

@@ -3,6 +3,7 @@
 namespace App\Modules\Shared\Models;
 
 use App\Modules\Shared\Services\ArabicNormalizer;
+use App\Modules\Shared\Services\Navigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -47,7 +48,13 @@ class Category extends Model
                     ->update(['path' => $path]));
                 $category->path = $path;
             }
+
+            Navigation::flush();
         });
+
+        // تعطيل تصنيف من لوحة الإدارة يَعِد بإخفائه فوراً — وترويسةٌ مخزَّنة
+        // تُبقيه معروضاً تُخلف الوعد بصمت
+        static::deleted(fn () => Navigation::flush());
     }
 
     public function parent(): BelongsTo

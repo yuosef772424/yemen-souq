@@ -106,6 +106,13 @@
     </div>
 </fieldset>
 
+{{-- ═══ بصور فقط: القدرة جاهزة في الخادم أصلاً، هذا فقط مفتاحها ═══ --}}
+<label class="flex items-center gap-2 rounded-2xl border border-line bg-white p-4 text-sm font-medium">
+    <input type="checkbox" name="with_image" value="1" @checked($criteria->withImageOnly)
+           class="size-4 rounded border-line text-brand focus:ring-brand">
+    <span>الإعلانات التي تحوي صورة فقط</span>
+</label>
+
 <div class="flex gap-2">
     <button type="submit"
             class="flex-1 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-dark">

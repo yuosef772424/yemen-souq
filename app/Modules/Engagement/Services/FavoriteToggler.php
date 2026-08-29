@@ -87,6 +87,30 @@ final class FavoriteToggler
     }
 
     /**
+     * أيّ إعلانات هذه الصفحة محفوظة عند هذا المستخدم — باستعلام واحد.
+     *
+     * `has` فرديّ، ونداؤه لكل بطاقة في صفحة نتائج هو نفس الـ24 استعلاماً
+     * التي وُجد `favorites_count` أصلاً لتفاديها. وبلا هذه الدالة يبقى
+     * أمام صفحة النتائج خياران كلاهما سيئ: قلبٌ لا يعرف حالته فيبدو
+     * معطَّلاً بعد الضغط، أو قراءةُ جدول `favorites` من داخل وحدة أخرى.
+     *
+     * @param  array<int, int>  $listingIds
+     * @return array<int, int> معرّفات المحفوظ منها
+     */
+    public function among(User $user, array $listingIds): array
+    {
+        if ($listingIds === []) {
+            return [];
+        }
+
+        return DB::table('favorites')
+            ->where('user_id', $user->id)
+            ->whereIn('listing_id', $listingIds)
+            ->pluck('listing_id')
+            ->all();
+    }
+
+    /**
      * العدّاد لا ينزل تحت الصفر.
      *
      * unsignedInteger في المخطط، فقيمة سالبة خطأ SQL يُسقط الطلب. وحدوثه

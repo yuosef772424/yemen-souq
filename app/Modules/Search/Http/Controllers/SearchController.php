@@ -4,6 +4,7 @@ namespace App\Modules\Search\Http\Controllers;
 
 use App\Modules\Analytics\Events\EventName;
 use App\Modules\Analytics\Services\EventRecorder;
+use App\Modules\Engagement\Services\FavoriteToggler;
 use App\Modules\Search\DTO\SearchCriteria;
 use App\Modules\Search\Services\SearchQueryBuilder;
 use App\Modules\Shared\Models\Category;
@@ -23,6 +24,7 @@ class SearchController
         private readonly ExchangeRateService $rates,
         private readonly ArabicNormalizer $normalizer,
         private readonly EventRecorder $events,
+        private readonly FavoriteToggler $favorites,
     ) {}
 
     public function __invoke(Request $request): View
@@ -52,7 +54,27 @@ class SearchController
             'rateMap' => $this->rates->currentRates(),
             'baseCurrency' => Currency::base(),
             'categoryAttributes' => $this->categoryAttributes($criteria),
+            'favoritedIds' => $this->favoritedIds($request, $listings),
         ]);
+    }
+
+    /**
+     * ما هو محفوظ من نتائج هذه الصفحة — ليعرف قلب البطاقة حالته.
+     *
+     * استعلام واحد للصفحة كلها عبر عقد Engagement، ولا شيء إطلاقاً
+     * للزائر غير المسجَّل: القلب لا يُعرض له أصلاً.
+     *
+     * @return array<int, int>
+     */
+    private function favoritedIds(Request $request, LengthAwarePaginator $listings): array
+    {
+        $user = $request->user();
+
+        if ($user === null || $listings->isEmpty()) {
+            return [];
+        }
+
+        return $this->favorites->among($user, $listings->pluck('id')->all());
     }
 
     /**

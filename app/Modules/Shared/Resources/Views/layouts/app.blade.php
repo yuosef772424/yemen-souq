@@ -14,72 +14,7 @@
 </head>
 <body class="min-h-screen bg-canvas text-ink antialiased">
 
-<header class="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
-    <div class="mx-auto flex max-w-6xl items-center gap-2 px-4 py-3">
-        <a href="{{ route('search') }}" class="flex items-center gap-2 shrink-0">
-            <span class="grid size-9 place-items-center rounded-lg bg-ink text-sm font-bold text-white">سوق</span>
-            <span class="hidden text-base font-semibold sm:block">سوق يمني</span>
-        </a>
-
-        <div class="flex-1"></div>
-
-        @auth
-            {{--
-                روابط بلا عدّاد غير مقروء بقصد.
-
-                شارة «3 رسائل جديدة» في الترويسة تعني استعلام COUNT في كل
-                صفحة من الموقع لكل مستخدم مسجَّل — بما فيها صفحات لا علاقة
-                لها بالرسائل. الرقم يُعرض في صفحة الرسائل نفسها حيث يُقرأ.
-
-                والقاعدة نفسها تسري على الإشعارات، وهي أشدّ إغراءً بالمخالفة:
-                جرس بلا رقم يبدو ناقصاً. لكن الرقم هنا استعلامٌ ثانٍ على
-                app_notifications في كل صفحة — والمقابل رقمٌ يقرؤه المستخدم
-                مرة ثم يفتح الصفحة على أي حال.
-
-                موضع العدّاد الصحيح هو الدفع في التطبيق: هناك يصل الرقم مع
-                الإشعار بلا استعلام، وهناك يُقرأ والشاشة مقفلة.
-            --}}
-            <nav class="flex items-center gap-1 text-sm" aria-label="حسابي">
-                <a href="{{ route('account.listings') }}"
-                   class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">إعلاناتي</a>
-                {{--
-                    «لوحتي» قبل «إعلاناتي» في الأهمية وبعدها في الترتيب بقصد:
-                    من يدخل يبحث عن إعلاناته أولاً، ويكتشف اللوحة ثانياً.
-                --}}
-                <a href="{{ route('merchant.dashboard') }}"
-                   class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">لوحتي</a>
-                <a href="{{ route('account.messages') }}"
-                   class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">رسائلي</a>
-                <a href="{{ route('account.notifications') }}"
-                   class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">الإشعارات</a>
-                <a href="{{ route('account.favorites') }}"
-                   class="hidden rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink sm:block">المفضلة</a>
-                {{--
-                    «حسابي» آخر الروابط لا أولها: يُفتح مرةً كل عدة أشهر،
-                    بينما ما قبله يُفتح كل زيارة. والترتيب في الترويسة
-                    يُقرأ كترتيب أهمية.
-                --}}
-                <a href="{{ route('account.settings') }}"
-                   class="rounded-lg px-2.5 py-2 font-medium text-muted transition hover:text-ink">حسابي</a>
-            </nav>
-
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button type="submit" class="rounded-lg px-2.5 py-2 text-sm font-medium text-muted transition hover:text-ink">
-                    خروج
-                </button>
-            </form>
-        @else
-            <a href="{{ route('login') }}" class="rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-ink">
-                دخول
-            </a>
-        @endauth
-
-        <a href="{{ route('listing.create') }}" class="shrink-0 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
-            أضف إعلانك
-        </a>
-    </div>
-</header>
+@include('shared::partials.header')
 
 <main class="mx-auto max-w-6xl px-4 py-6">
     @if (session('status'))

@@ -71,3 +71,75 @@ jobs:
 
       - name: تشغيل الحُزمة
         run: php artisan test
+
+  # ═══════════════════════════════════════════════════════════════════
+  # صورة النشر — تُبنى وتُشغَّل، لا تُبنى وحدها
+  # ═══════════════════════════════════════════════════════════════════
+  #
+  # أُضيفت بعد أول نشر حقيقي، وفيه ستة أعطال متتالية كلها كانت قابلة
+  # للاكتشاف قبل الوصول إلى المنصة: امتداد ناقص، وentrypoint يفشل،
+  # وAPP_URL معطوب، ومنفذ لا يستمع عليه أحد. كلٌّ منها كلّف دورة نشر
+  # كاملة ليظهر، وبعضها ظهر برسالة لا تدلّ على سببه.
+  #
+  # ولهذا لا يكفي `docker build`: البناء كان ينجح في أغلب تلك الأعطال،
+  # والانهيار يقع عند الإقلاع. فالوظيفة هنا **تشغّل الحاوية وتنادي
+  # الخادم** — وهو الفرق بين فحص يطمئنك وفحص يحميك.
+
+  image:
+    name: صورة النشر
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # مخبأ GitHub للطبقات: تصريف الامتدادات (وintl خاصةً) يستغرق
+      # دقائق، ولا يتغيّر إلا حين يتغيّر Dockerfile نفسه
+      - name: بناء الصورة
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: yemen-souq:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # الحارس يجب أن يرفض، والنجاح هنا هو الفشل
+      - name: حارس APP_URL يرفض قيمة معطوبة
+        run: |
+          if docker run --rm -e APP_URL=https:// yemen-souq:ci true 2>/dev/null; then
+            echo "::error::حارس APP_URL لم يرفض 'https://' — الحاوية ستدخل حلقة إقلاع على المنصة"
+            exit 1
+          fi
+          echo "الحارس رفض القيمة المعطوبة كما يجب"
+
+      # العطل الذي كلّف أطول وقت: الخادم يعمل على منفذ لا يوجَّه إليه
+      # شيء. المنصة تحقن PORT، والصورة كانت تتجاهله — فتبدو الحاوية
+      # حيّة ولا يصلها طلب واحد. المنفذ هنا غير قياسي بقصد: 80 كان
+      # سيمرّ بالصدفة
+      - name: الحاوية تستمع على المنفذ الذي تُملى به
+        run: |
+          docker run -d --name souq-ci -p 9137:9137 \
+            -e PORT=9137 \
+            -e APP_KEY="base64:$(head -c 32 /dev/urandom | base64)" \
+            -e APP_URL=http://localhost:9137 \
+            -e APP_ENV=production \
+            -e DB_CONNECTION=sqlite \
+            -e DB_DATABASE=:memory: \
+            yemen-souq:ci
+
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9137/up || echo 000)
+            [ "$code" = "200" ] && echo "الخادم ردّ 200 على /up بعد ${i}ث" && exit 0
+            sleep 1
+          done
+
+          echo "::error::لا استجابة على المنفذ 9137 خلال 30 ثانية — آخر رمز: ${code}"
+          docker logs souq-ci
+          exit 1
+
+      - name: إيقاف الحاوية
+        if: always()
+        run: docker rm -f souq-ci 2>/dev/null || true

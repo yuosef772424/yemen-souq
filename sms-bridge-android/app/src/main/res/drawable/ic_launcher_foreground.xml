@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A message bubble with a two-way arrow: the app relays SMS in both directions. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- speech bubble, white -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,26
+                           H76
+                           A10,10 0 0 1 86,36
+                           V56
+                           A10,10 0 0 1 76,66
+                           H40
+                           L30,80
+                           L34,66
+                           H32
+                           A10,10 0 0 1 22,56
+                           V36
+                           A10,10 0 0 1 32,26
+                           Z" />
+    <!-- bidirectional arrow inside the bubble, same blue as the icon background -->
+    <path
+        android:fillColor="#2563EB"
+        android:pathData="M32,46 L44,38 L44,43 L64,43 L64,38 L76,46 L64,54 L64,49 L44,49 L44,54 Z" />
+</vector>

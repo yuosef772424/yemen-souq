@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App icon background — a neutral communication blue, not tied to any host project -->
+    <color name="icon_background">#2563EB</color>
+</resources>

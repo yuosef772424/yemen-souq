@@ -3,7 +3,7 @@
 namespace App\Modules\Identity\Senders;
 
 use App\Modules\Identity\Contracts\PhoneVerificationSender;
-use RuntimeException;
+use App\Modules\Identity\Exceptions\PhoneVerificationUnavailableException;
 
 /**
  * لا يُرسل شيئاً — يُعرَض الرمز على الشاشة.
@@ -19,7 +19,7 @@ final class DisplaySender implements PhoneVerificationSender
     public function send(string $phone, string $code): void
     {
         if (app()->environment('production')) {
-            throw new RuntimeException(
+            throw new PhoneVerificationUnavailableException(
                 'DisplaySender لا يعمل في الإنتاج. اضبط PHONE_VERIFICATION_DRIVER=sms.'
             );
         }

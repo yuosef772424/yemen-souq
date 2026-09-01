@@ -3,7 +3,7 @@
 namespace App\Modules\Identity\Senders;
 
 use App\Modules\Identity\Contracts\PhoneVerificationSender;
-use RuntimeException;
+use App\Modules\Identity\Exceptions\PhoneVerificationUnavailableException;
 
 /**
  * مزوّد رسائل حقيقي — الموضع الذي ينتظر التكامل.
@@ -15,7 +15,7 @@ final class SmsGatewaySender implements PhoneVerificationSender
 {
     public function send(string $phone, string $code): void
     {
-        throw new RuntimeException(
+        throw new PhoneVerificationUnavailableException(
             'لم يُربط مزوّد رسائل بعد. نفّذ هذا الصنف أو أعد PHONE_VERIFICATION_DRIVER=display.'
         );
     }

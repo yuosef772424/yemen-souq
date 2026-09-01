@@ -3,6 +3,7 @@
 namespace App\Modules\Identity\Http\Controllers;
 
 use App\Modules\Identity\Enums\VerificationResult;
+use App\Modules\Identity\Exceptions\PhoneVerificationUnavailableException;
 use App\Modules\Identity\Services\PhoneVerificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -58,6 +59,10 @@ class PhoneVerificationController
     {
         try {
             $code = $this->verification->issue($request->user()->phone);
+        } catch (PhoneVerificationUnavailableException $e) {
+            report($e);
+
+            return back()->withErrors(['code' => 'توثيق الهاتف متوقّف مؤقتاً. حاول لاحقاً.']);
         } catch (RuntimeException $e) {
             return back()->withErrors(['code' => $e->getMessage()]);
         }

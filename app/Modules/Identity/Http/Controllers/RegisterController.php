@@ -3,6 +3,7 @@
 namespace App\Modules\Identity\Http\Controllers;
 
 use App\Models\User;
+use App\Modules\Identity\Exceptions\PhoneVerificationUnavailableException;
 use App\Modules\Identity\Http\Requests\RegisterRequest;
 use App\Modules\Identity\Models\UserProfile;
 use App\Modules\Identity\Services\PhoneVerificationService;
@@ -56,6 +57,15 @@ class RegisterController
 
         try {
             $code = $this->verification->issue($user->phone, $this->ipPrefix($request->ip()));
+        } catch (PhoneVerificationUnavailableException $e) {
+            // القناة غير جاهزة على مستوى الخادم — لا شأن للمستخدم بذلك،
+            // ورسالة الاستثناء تسمّي أصنافاً ومتغيّرات بيئة لا يجوز أن
+            // يراها. السبب الحقيقي يبقى في السجلّ، والحساب أُنشئ فعلاً.
+            report($e);
+
+            return redirect()
+                ->route('phone.verify')
+                ->with('status', 'أنشئ حسابك. توثيق الهاتف متوقّف مؤقتاً — سيعمل النشر بمجرد تفعيله.');
         } catch (RuntimeException $e) {
             return redirect()->route('phone.verify')->with('status', $e->getMessage());
         }

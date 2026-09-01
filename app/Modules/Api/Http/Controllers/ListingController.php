@@ -13,6 +13,7 @@ use App\Modules\Engagement\Services\ConversationService;
 use App\Modules\Engagement\Services\FavoriteToggler;
 use App\Modules\Engagement\Services\QuestionService;
 use App\Modules\Search\DTO\SearchCriteria;
+use App\Modules\Search\Pagination\BoundedPaginator;
 use App\Modules\Search\Services\SearchQueryBuilder;
 use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Services\ArabicNormalizer;
@@ -79,6 +80,9 @@ class ListingController
         return ListingResource::collection($listings)->additional([
             'meta' => [
                 'match_mode' => $result['mode'],
+                // meta.total مسقوف — والعميل يحتاج معرفة ذلك ليعرض «+»
+                // بدل رقمٍ يقرؤه كنهائي. انظر BoundedPaginator
+                'results_capped' => $listings instanceof BoundedPaginator && $listings->isCapped(),
                 'query' => $criteria->query,
                 'filters' => $criteria->activeFilterKeys(),
             ],

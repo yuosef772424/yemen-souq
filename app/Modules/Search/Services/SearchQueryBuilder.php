@@ -4,11 +4,13 @@ namespace App\Modules\Search\Services;
 
 use App\Modules\Catalog\Models\Listing;
 use App\Modules\Search\DTO\SearchCriteria;
+use App\Modules\Search\Pagination\BoundedPaginator;
 use App\Modules\Shared\Models\Category;
 use App\Modules\Shared\Models\Location;
 use App\Modules\Shared\Services\ExchangeRateService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -25,6 +27,9 @@ final class SearchQueryBuilder
     public const MODE_STRICT = 'strict';
 
     public const MODE_LOOSE = 'loose';
+
+    /** يُستعمل حين لا يوجد config — والقيمة المعتمدة في config/search.php */
+    public const DEFAULT_RESULT_CAP = 1000;
 
     public function __construct(
         private readonly SearchTokenizer $tokenizer,
@@ -60,14 +65,68 @@ final class SearchQueryBuilder
         ];
     }
 
+    /**
+     * الترقيم مسقوف — لا `paginate()` القياسية.
+     *
+     * القياسية تُنفّذ `COUNT(*)` بلا حدّ على كل صفٍّ مطابق، وهو ما يجعل
+     * الكلمة الشائعة أبطأ من النادرة بمراتب. وهنا يُعدّ حتى السقف فقط،
+     * ويُتخطّى استعلام الصفحة كلياً إن كانت خارج المدى — فالصفحة رقم
+     * ألف لا تكلّف شيئاً بدل أن تكلّف `OFFSET` هائلاً.
+     */
     public function paginate(SearchCriteria $criteria, string $mode = self::MODE_STRICT): LengthAwarePaginator
     {
-        return $this->build($criteria, $mode)->paginate($criteria->perPage)->withQueryString();
+        $query = $this->build($criteria, $mode);
+        $perPage = $criteria->perPage;
+        $page = max(1, Paginator::resolveCurrentPage());
+
+        $cap = $this->cap();
+        $found = $this->boundedCount($query, $cap);
+        $capped = $found > $cap;
+        $total = $capped ? $cap : $found;
+
+        $items = ($page - 1) * $perPage >= $total
+            ? collect()
+            : $query->forPage($page, $perPage)->get();
+
+        return (new BoundedPaginator($items, $total, $perPage, $page, [
+            'path' => Paginator::resolveCurrentPath(),
+            'pageName' => 'page',
+        ], $capped))->withQueryString();
     }
 
+    /** العدد الحقيقي بلا سقف — للتقييم والتشخيص، لا لمسار الطلب */
     public function count(SearchCriteria $criteria, string $mode = self::MODE_STRICT): int
     {
         return $this->build($criteria, $mode)->count();
+    }
+
+    /**
+     * العدّ إلى السقف ثم التوقّف.
+     *
+     * `reorder()` لازمة لا تجميلية: مع `ORDER BY` على تعبيرات الصلة لا
+     * تستطيع قاعدة البيانات التوقف عند الصفّ الألف — عليها فرز المطابقات
+     * كلها أولاً لتعرف أيُّها الألف. وبإسقاط الترتيب يصير `LIMIT` حدّاً
+     * فعلياً على العمل لا على المخرجات وحدها.
+     *
+     * والصفّ الزائد (`+ 1`) هو ما يفرّق «ألف» من «أكثر من ألف».
+     */
+    private function boundedCount(Builder $query, int $cap): int
+    {
+        $bounded = $query->clone()
+            ->reorder()
+            ->select('listings.id')
+            ->limit($cap + 1);
+
+        return DB::query()->fromSub($bounded, 'bounded')->count();
+    }
+
+    /**
+     * السقف المعتمد — قابل للضبط لأن حجم البيانات يختلف بين تركيب وآخر،
+     * وتحتاجه الاختبارات صغيراً لتفحص السلوك لا لتبني ألف صفّ.
+     */
+    private function cap(): int
+    {
+        return (int) config('search.result_cap', self::DEFAULT_RESULT_CAP);
     }
 
     public function build(SearchCriteria $criteria, string $mode = self::MODE_STRICT): Builder
@@ -371,13 +430,28 @@ final class SearchQueryBuilder
     /**
      * توزيع النتائج على العملات — يُعرض بجانب فلتر العملة.
      *
-     * reorder() ضرورية: تُزيل ترتيب الصلة وارتباطاته، وGROUP BY لا يقبل
-     * ترتيباً بتعبير على عمود غير مجمَّع.
+     * محسوبٌ على نافذةٍ بحجم نافذة العدّ نفسها، لا على المطابقات كلها.
+     * والسبب ليس الأداء وحده: عدّادٌ يقول «أكثر من ألف» وشريطٌ تحته
+     * يوزّع مئة ألف على العملات تناقضٌ يقرؤه المستخدم على الشاشة
+     * نفسها. وبالتسقيف يتّفق المجموعان.
+     *
+     * وما لا يُدّعى: النافذة **عيّنة** من المطابقات لا أوائلَها مرتَّبة.
+     * إعادة الترتيب إليها تعيد الفرز الكامل الذي سقّفنا لتفاديه، والشريط
+     * غايته أن يقول «النتائج مختلطة العملات» لا أن يعطي إحصاءً دقيقاً.
+     * وتحت السقف يبقى التوزيع تامّاً — النافذة أوسع من النتائج.
+     *
+     * reorder() ضرورية هنا كذلك: تُزيل ترتيب الصلة وارتباطاته، وGROUP BY
+     * لا يقبل ترتيباً بتعبير على عمود غير مجمَّع.
      */
     public function currencyBreakdown(SearchCriteria $criteria, string $mode = self::MODE_STRICT): array
     {
-        return $this->build($criteria, $mode)
+        $window = $this->build($criteria, $mode)
             ->reorder()
+            ->select('currency_code')
+            ->limit($this->cap());
+
+        return DB::query()
+            ->fromSub($window, 'window')
             ->select('currency_code', DB::raw('count(*) as total'))
             ->groupBy('currency_code')
             ->pluck('total', 'currency_code')

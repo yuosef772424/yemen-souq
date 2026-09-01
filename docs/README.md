@@ -9,6 +9,7 @@
 |---|---|
 | [`overview.md`](overview.md) | ما هو النظام؟ ما وحداته وماذا يعمل منها فعلاً؟ |
 | [`build-log.md`](build-log.md) | كيف وصل إلى هنا؟ ما القرارات وما اكتُشف أثناءها؟ |
+| [`completion-roadmap.md`](completion-roadmap.md) | ما الناقص، وبأي ترتيب يُبنى، وما دُرس ورُفض؟ |
 
 **اقرأ `overview.md` لتفهم النظام، و`build-log.md` لتفهم لماذا هو هكذا.** الأول يصف
 الحاضر، والثاني يصف الطريق — وأكثر ما يضيع بين الجلسات هو الثاني.
@@ -18,6 +19,7 @@
 | الملف | الموضوع |
 |---|---|
 | [`architecture/modules.md`](architecture/modules.md) | عقد الوحدات: الاكتشاف التلقائي واتجاه الاعتماد وما يحرسه |
+| [`architecture/filters.md`](architecture/filters.md) | الفلاتر والترتيب: من طلب HTTP إلى استعلام، وفلترة الخصائص |
 | [`architecture/api.md`](architecture/api.md) | عقد الـAPI: المصادقة بالرمز، شكل الاستجابة، الحدود، نقاط النهاية |
 | [`architecture/sms-outbox.md`](architecture/sms-outbox.md) | طابور الرسائل: السحب الذرّي، الحراسة، عامل تيرمكس، وكيف تُحذف الوحدة |
 | [`architecture/schema.md`](architecture/schema.md) | كل جدول وكل حقل: لماذا يوجد — وتحليل ما يُدمَج وما لا يُدمَج |

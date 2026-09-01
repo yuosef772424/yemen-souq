@@ -60,7 +60,9 @@
 {{-- ═══ العنوان: يحمل ما يبحث عنه الزائر وأين وكم — لا عدّاداً منفصلاً ═══ --}}
 <h1 class="mt-2 text-xl font-bold sm:text-2xl">
     {{ $heading }}
-    <span class="tabular-nums font-semibold text-muted">({{ number_format($listings->total()) }})</span>
+    {{-- «+» لا رقمٌ دقيق عند بلوغ السقف: العدّ يتوقف عند ألف، فادّعاء رقمٍ
+         أكبر ادّعاءُ ما لم يُحسب. انظر BoundedPaginator --}}
+    <span class="tabular-nums font-semibold text-muted">({{ number_format($listings->total()) }}{{ $listings->isCapped() ? '+' : '' }})</span>
 </h1>
 
 {{-- ═══ شرائح الأقسام الفرعية: التعمّق بنقرة بلا فتح لوحة الفلاتر ═══ --}}
@@ -149,7 +151,7 @@
              التمرير كما في منصات التسوّق الكبرى --}}
         <div class="sticky top-[104px] z-20 -mx-4 flex flex-wrap items-center justify-between gap-3 border-b border-line bg-canvas/95 px-4 py-3 backdrop-blur sm:mx-0 sm:px-0">
             <p class="text-sm text-muted">
-                <span class="font-semibold text-ink">{{ number_format($listings->total()) }}</span> إعلان
+                <span class="font-semibold text-ink">{{ $listings->isCapped() ? 'أكثر من '.number_format($listings->total()) : number_format($listings->total()) }}</span> إعلان
                 @if ($criteria->hasPriceFilter())
                     <span class="text-ink">·</span>
                     <span>ضمن نطاقك السعري بعد توحيد العملات</span>

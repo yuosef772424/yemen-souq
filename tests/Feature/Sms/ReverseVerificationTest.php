@@ -307,6 +307,41 @@ class ReverseVerificationTest extends TestCase
             ->assertSee(route('sms.challenge'));
     }
 
+    /**
+     * ما تستطلعه الصفحة عبر JS فيما ينتظر المستخدم رسالته — بلا هذا
+     * الاستطلاع يوثَّق الحساب من الخلف ولا يعرف صاحبه إلا بتحديث يدوي.
+     */
+    #[Test]
+    public function the_status_endpoint_reports_unverified_before_the_message_arrives(): void
+    {
+        $this->challenges->issue($this->user);
+
+        $this->actingAs($this->user)
+            ->getJson('/verify-by-sms/status')
+            ->assertOk()
+            ->assertJsonPath('verified', false);
+    }
+
+    #[Test]
+    public function the_status_endpoint_reports_verified_once_the_challenge_is_consumed(): void
+    {
+        $challenge = $this->challenges->issue($this->user);
+        $this->challenges->consume('0771234567', $challenge['token']);
+
+        // fresh(): consume() يوثّق صفّ المستخدم في القاعدة عبر نسخة أخرى
+        // (challenge->user)، و$this->user في الذاكرة لا يعرف بذلك تلقائياً
+        $this->actingAs($this->user->fresh())
+            ->getJson('/verify-by-sms/status')
+            ->assertOk()
+            ->assertJsonPath('verified', true);
+    }
+
+    #[Test]
+    public function the_status_endpoint_requires_authentication(): void
+    {
+        $this->getJson('/verify-by-sms/status')->assertUnauthorized();
+    }
+
     #[Test]
     public function the_app_gets_the_same_challenge_over_the_api(): void
     {

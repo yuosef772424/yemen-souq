@@ -16,31 +16,50 @@
             لم يُضبط رقم الاستقبال بعد. راجع الإدارة.
         </div>
     @else
-        <div class="mt-6 rounded-xl border border-line bg-white p-5">
-            <p class="text-sm text-muted">أرسل هذا النصّ كما هو:</p>
-            <p dir="ltr" class="mt-2 text-center text-2xl font-bold tracking-[0.2em] tabular-nums">{{ $display }}</p>
+        {{-- استطلاعٌ خفيف كل أربع ثوانٍ لا اتصال دائم: الحدث نادر (توثيق
+             واحد لكل مستخدم) ومهلته دقائق، فبولينغ بسيط يكفي بلا حاجة
+             WebSocket. عند التوثيق تُعاد الصفحة نفسها فيتولّى المتحكّم
+             (ChallengeController::show) التحويل ورسالة النجاح — لا منطق
+             مكرَّر هنا. --}}
+        <div x-data="{
+                checking: false,
+                poll() {
+                    if (this.checking) return;
+                    this.checking = true;
+                    fetch('{{ route('sms.challenge.status') }}', { headers: { Accept: 'application/json' } })
+                        .then((response) => response.json())
+                        .then((data) => { if (data.verified) location.href = '{{ route('sms.challenge') }}'; })
+                        .finally(() => { this.checking = false; });
+                },
+             }"
+             x-init="poll(); setInterval(() => poll(), 4000)"
+        >
+            <div class="mt-6 rounded-xl border border-line bg-white p-5">
+                <p class="text-sm text-muted">أرسل هذا النصّ كما هو:</p>
+                <p dir="ltr" class="mt-2 text-center text-2xl font-bold tracking-[0.2em] tabular-nums">{{ $display }}</p>
 
-            <p class="mt-4 text-sm text-muted">إلى الرقم:</p>
-            <p dir="ltr" class="mt-1 text-center text-lg font-semibold tabular-nums">{{ $number }}</p>
+                <p class="mt-4 text-sm text-muted">إلى الرقم:</p>
+                <p dir="ltr" class="mt-1 text-center text-lg font-semibold tabular-nums">{{ $number }}</p>
 
-            <p class="mt-4 text-xs text-muted">
-                تنتهي صلاحيته بعد {{ $minutes }} دقيقة. وتُوثَّق الصفحة تلقائياً بعد وصول رسالتك —
-                حدّثها بعد الإرسال.
-            </p>
-        </div>
+                <p class="mt-4 text-xs text-muted">
+                    تنتهي صلاحيته بعد {{ $minutes }} دقيقة. هذه الصفحة تتحقّق من وصول رسالتك
+                    تلقائياً وتنقلك بمجرد التوثيق — لا حاجة لتحديثها بنفسك.
+                </p>
+            </div>
 
-        @if ($smsLink)
-            {{-- الرابط يفتح مؤلّف الرسائل بالرقم والنصّ جاهزين: النسخ
-                 اليدوي هو أكثر ما يُخطئ فيه من يكتب بالإبهام --}}
-            <a href="{{ $smsLink }}"
-               class="mt-4 block w-full rounded-xl bg-brand px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-brand-dark">
-                افتح تطبيق الرسائل جاهزاً
-            </a>
-        @endif
+            @if ($smsLink)
+                {{-- الرابط يفتح مؤلّف الرسائل بالرقم والنصّ جاهزين: النسخ
+                     اليدوي هو أكثر ما يُخطئ فيه من يكتب بالإبهام --}}
+                <a href="{{ $smsLink }}"
+                   class="mt-4 block w-full rounded-xl bg-brand px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-brand-dark">
+                    افتح تطبيق الرسائل جاهزاً
+                </a>
+            @endif
 
-        <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-            <p class="font-semibold">تُحسب عليك رسالة واحدة بتعرفة مشغّلك.</p>
-            <p class="mt-1">ولا نقرأ من صندوق رسائلك شيئاً — تصلنا رسالتك أنت وحدها، كما يصل أي مرسِل.</p>
+            <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+                <p class="font-semibold">تُحسب عليك رسالة واحدة بتعرفة مشغّلك.</p>
+                <p class="mt-1">ولا نقرأ من صندوق رسائلك شيئاً — تصلنا رسالتك أنت وحدها، كما يصل أي مرسِل.</p>
+            </div>
         </div>
     @endif
 

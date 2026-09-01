@@ -30,6 +30,20 @@ class ChallengeController
         private readonly ChallengeVerifier $challenges,
     ) {}
 
+    /**
+     * تستطلعها الصفحة عبر JS فيما ينتظر المستخدم رسالته.
+     *
+     * لا شيء غير هذا الحقل: القناة الواردة توثّق الحساب من الخلف
+     * (`ChallengeVerifier::consume`)، والصفحة المفتوحة أمام المستخدم لا
+     * تعرف بذلك إلا إن سألت. والسؤال بولينغ خفيف لا Pusher ولا
+     * WebSocket — الحدث نادر (توثيق واحد لكل مستخدم) ومهلته قصيرة
+     * (دقائق التحدّي)، فلا يبرّر بنية تحتية إضافية.
+     */
+    public function status(Request $request): JsonResponse
+    {
+        return response()->json(['verified' => $request->user()->hasVerifiedPhone()]);
+    }
+
     public function show(Request $request): View|RedirectResponse
     {
         $user = $request->user();

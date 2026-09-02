@@ -48,28 +48,61 @@
 
     <div class="space-y-5">
 
-        {{-- معرض الصور --}}
-        <div x-data="{ active: 0 }" class="overflow-hidden rounded-2xl border border-line bg-white">
-            <div class="aspect-[16/10] bg-tint">
-                @forelse ($listing->images as $index => $image)
-                    <img @if ($index > 0) x-show="active === {{ $index }}" x-cloak
-                         @else x-show="active === 0" @endif
-                         src="{{ asset('storage/' . $image->path) }}"
-                         alt="{{ $listing->title }} — صورة {{ $index + 1 }}"
-                         class="size-full object-cover">
-                @empty
-                    <div class="grid size-full place-items-center text-sm text-muted">لا توجد صور لهذا الإعلان</div>
-                @endforelse
+        {{-- معرض الصور: يُبدَّل بالسحب أو بالمصغّرات أو بالأسهم --}}
+        <div x-data="gallery" class="overflow-hidden rounded-2xl border border-line bg-white">
+            <div class="relative">
+                {{-- snap-x/snap-mandatory: الالتقاط عند أقرب صورة من CSS
+                     لا من JS — فيبقى زخم التمرير أصلياً على الجوال --}}
+                <div x-ref="track" @scroll.passive.debounce.60ms="sync()"
+                     class="flex aspect-[16/10] snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-smooth bg-tint scrollbar-none">
+                    @forelse ($listing->images as $index => $image)
+                        <img src="{{ asset('storage/' . $image->path) }}"
+                             alt="{{ $listing->title }} — صورة {{ $index + 1 }}"
+                             {{-- أول صورة eager: هي ما يراه الزائر قبل أي سحب --}}
+                             loading="{{ $index === 0 ? 'eager' : 'lazy' }}"
+                             draggable="false"
+                             class="size-full shrink-0 snap-center object-cover">
+                    @empty
+                        <div class="grid size-full place-items-center text-sm text-muted">لا توجد صور لهذا الإعلان</div>
+                    @endforelse
+                </div>
+
+                @if ($listing->images->count() > 1)
+                    {{-- عدّاد: يقول إن وراء الصورة صوراً أخرى. وبلاه لا شيء
+                         يدعو المستخدم إلى السحب أصلاً --}}
+                    <div class="pointer-events-none absolute bottom-3 end-3 rounded-full bg-ink/70 px-2.5 py-1 text-xs font-medium text-white tabular-nums">
+                        <span x-text="active + 1">1</span> / {{ $listing->images->count() }}
+                    </div>
+
+                    {{-- الأسهم لمن يستعمل فأرة: السحب لا مقابل له على سطح
+                         المكتب، وشريط التمرير مخفيّ --}}
+                    <button type="button" @click="go(Math.max(0, active - 1))"
+                            x-show="active > 0" x-cloak
+                            class="absolute start-2 top-1/2 hidden size-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-ink shadow transition hover:bg-white md:grid"
+                            aria-label="الصورة السابقة">
+                        <svg class="size-5 rtl:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+
+                    <button type="button" @click="go(Math.min({{ $listing->images->count() - 1 }}, active + 1))"
+                            x-show="active < {{ $listing->images->count() - 1 }}"
+                            class="absolute end-2 top-1/2 hidden size-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-ink shadow transition hover:bg-white md:grid"
+                            aria-label="الصورة التالية">
+                        <svg class="size-5 rtl:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                @endif
             </div>
 
             @if ($listing->images->count() > 1)
-                <div class="flex gap-2 overflow-x-auto p-3">
+                <div class="flex gap-2 overflow-x-auto p-3 scrollbar-none">
                     @foreach ($listing->images as $index => $image)
-                        <button type="button" @click="active = {{ $index }}"
+                        <button type="button" @click="go({{ $index }})"
                                 :class="active === {{ $index }} ? 'ring-2 ring-brand' : 'ring-1 ring-line'"
-                                class="size-16 shrink-0 overflow-hidden rounded-lg"
+                                class="size-16 shrink-0 overflow-hidden rounded-lg transition active:scale-95"
                                 aria-label="الصورة {{ $index + 1 }}">
-                            <img src="{{ asset('storage/' . $image->path) }}" alt="" class="size-full object-cover">
+                            <img src="{{ asset('storage/' . $image->path) }}" alt="" loading="lazy"
+                                 class="size-full object-cover">
                         </button>
                     @endforeach
                 </div>

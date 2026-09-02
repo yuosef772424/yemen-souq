@@ -63,6 +63,18 @@ button,
     }
 }
 
+/* شريط تمرير مخفيّ حيث يقوم غيره مقامه: معرض الصور يدلّ على موضعه
+   بعدّاد ومصغّرات، وشريط تمرير فوقهما ضجيجٌ لا يظهر في أي تطبيق أصلي.
+   والتمرير نفسه يبقى عاملاً — الإخفاء بصريّ لا وظيفيّ. */
+.scrollbar-none {
+    scrollbar-width: none;              /* فَيَرفُكس */
+    -ms-overflow-style: none;           /* إيدج القديم */
+}
+
+.scrollbar-none::-webkit-scrollbar {
+    display: none;                      /* ويبكِت */
+}
+
 [x-cloak] {
     display: none !important;
 }

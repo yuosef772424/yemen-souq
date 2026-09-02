@@ -19,6 +19,15 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', SearchController::class)->name('search');
 
+/*
+| صفحة الانقطاع — يقدّمها عامل الخدمة حين تسقط الشبكة أثناء تنقّل.
+|
+| مسارٌ حقيقي لا ملف ثابت في public: تُبنى بنفس القالب والهوية اللونية،
+| فلا تظهر صفحة غريبة عن الموقع في أسوأ لحظة يمرّ بها المستخدم. وهي
+| السبب الوحيد الذي يجعل التطبيق المثبَّت يبدو حيّاً بلا شبكة.
+*/
+Route::view('/offline', 'shared::offline')->name('offline');
+
 Route::get('/listing/{listing}', [ListingController::class, 'show'])->name('listing.show');
 
 Route::post('/listing/{listing}/contact', ContactRevealController::class)->name('listing.contact');

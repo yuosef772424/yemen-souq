@@ -34,21 +34,10 @@
     </p>
 </fieldset>
 
-{{-- ═══ عملة الإعلان: فلتر مستقل تماماً عن النطاق أعلاه ═══ --}}
-<fieldset class="rounded-2xl border border-line bg-white p-4">
-    <legend class="px-1 text-sm font-semibold">عملة الإعلان</legend>
-    <p class="mt-1 text-xs text-muted">لعرض الإعلانات المسعّرة بعملة واحدة فقط</p>
-
-    <select name="listing_currency"
-            class="mt-2 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm focus:border-brand focus:outline-none">
-        <option value="">كل العملات</option>
-        @foreach ($currencies as $currency)
-            <option value="{{ $currency->code }}" @selected($criteria->listingCurrency === $currency->code)>
-                {{ $currency->name_ar }}
-            </option>
-        @endforeach
-    </select>
-</fieldset>
+{{-- عملة الإعلان: لا فلتر ثابت هنا. الفلترة بعملة واحدة لا تنفع إلا حين
+     تختلط النتائج فعلياً — والقرار الأصوب أن يظهر خيار التضييق عند مكان
+     ظهور الاختلاط نفسه (شريط توزيع العملات في index.blade.php)، لا مكاناً
+     ثابتاً يُحمَّل مع كل صفحة سواء وُجد اختلاط أم لا --}}
 
 {{-- ═══ التصنيف ═══ --}}
 <fieldset class="rounded-2xl border border-line bg-white p-4">

@@ -199,15 +199,24 @@
             </p>
         @endif
 
-        {{-- توزيع العملات: يُظهر للمستخدم أن النتائج مختلطة العملات بدل أن يفاجأ --}}
+        {{--
+            توزيع العملات — ويُضيّق أيضاً، لا يُخبر فقط.
+
+            لا فلتر عملة ثابت في اللوحة الجانبية: التضييق بعملة واحدة لا
+            ينفع إلا حين تختلط النتائج فعلياً، وهذا الشريط لا يظهر أصلاً
+            إلا حينها (count($breakdown) > 1). فبدل عنصرين يفعلان الشيء
+            نفسه — قائمة ثابتة تُحمَّل دائماً، وشريطٌ يُخبر فقط — صار
+            واحداً يظهر عند الحاجة ويُضيّق بنقرة.
+        --}}
         @if (count($breakdown) > 1)
             <div class="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-tint p-3 text-xs">
                 <span class="font-semibold text-ink">النتائج معروضة بعملات مختلفة:</span>
                 @foreach ($breakdown as $code => $total)
                     @php $cur = $currencies->firstWhere('code', $code); @endphp
-                    <span class="rounded-md bg-white px-2 py-1 font-medium text-muted ring-1 ring-line">
+                    <a href="{{ route('search', [...request()->except(['page']), 'listing_currency' => $code]) }}"
+                       class="rounded-md bg-white px-2 py-1 font-medium text-muted ring-1 ring-line transition hover:border-brand hover:text-brand-dark">
                         {{ $cur?->name_ar ?? $code }} — {{ number_format($total) }}
-                    </span>
+                    </a>
                 @endforeach
                 <span class="w-full text-muted">القيم موحّدة داخلياً بـ{{ $baseCurrency->name_ar }} للمقارنة والترتيب.</span>
             </div>

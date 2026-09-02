@@ -7,12 +7,12 @@
        تباينياً (WCAG AA) على النص الأبيض وعلى canvas أدناه — انظر
        docs/architecture/design-tokens.md عند تعديلها. */
     --color-ink: #16233f;
-    --color-canvas: #f4f6f9;
-    --color-tint: #eef1f6;
-    --color-line: #dfe4ec;
-    --color-muted: #6b7688;
-    --color-brand: #0f766e;
-    --color-brand-dark: #115e56;
+    --color-canvas: #f2f8f8;
+    --color-tint: #e4f2f0;
+    --color-line: #d3e5e2;
+    --color-muted: #5f7472;
+    --color-brand: #0e857b;
+    --color-brand-dark: #0b6b62;
 
     --font-sans: "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
 }

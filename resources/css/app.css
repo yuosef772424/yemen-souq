@@ -1,14 +1,18 @@
 @import "tailwindcss";
 
 @theme {
-    /* لوحة عملية لموقع إعلانات: نيلي داكن أساسي، أخضر للأفعال */
+    /* الهوية اللونية — كحلي داكن أساسي، تيل للأفعال. طبقة واحدة معزولة عمداً:
+       كل واجهة في المشروع تستعمل هذه الأسماء (bg-brand, text-ink, ...) لا
+       قيماً مباشرة، فتغيير اللون هنا يكفي وحده بلا لمس أي قالب. القيم مُختبَرة
+       تباينياً (WCAG AA) على النص الأبيض وعلى canvas أدناه — انظر
+       docs/architecture/design-tokens.md عند تعديلها. */
     --color-ink: #16233f;
     --color-canvas: #f4f6f9;
     --color-tint: #eef1f6;
     --color-line: #dfe4ec;
     --color-muted: #6b7688;
-    --color-brand: #0e6e5e;
-    --color-brand-dark: #0a5347;
+    --color-brand: #0f766e;
+    --color-brand-dark: #115e56;
 
     --font-sans: "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
 }

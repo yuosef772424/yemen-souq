@@ -19,6 +19,7 @@
 | الملف | الموضوع |
 |---|---|
 | [`architecture/modules.md`](architecture/modules.md) | عقد الوحدات: الاكتشاف التلقائي واتجاه الاعتماد وما يحرسه |
+| [`architecture/design-tokens.md`](architecture/design-tokens.md) | الهوية اللونية: أين تعيش، لماذا هذه القيم، وكيف تُغيَّر بأمان |
 | [`architecture/filters.md`](architecture/filters.md) | الفلاتر والترتيب: من طلب HTTP إلى استعلام، وفلترة الخصائص |
 | [`architecture/api.md`](architecture/api.md) | عقد الـAPI: المصادقة بالرمز، شكل الاستجابة، الحدود، نقاط النهاية |
 | [`architecture/sms-outbox.md`](architecture/sms-outbox.md) | طابور الرسائل: السحب الذرّي، الحراسة، عامل تيرمكس، وكيف تُحذف الوحدة |

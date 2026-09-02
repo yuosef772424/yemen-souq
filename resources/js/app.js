@@ -186,5 +186,69 @@ Alpine.data('recentlyViewed', () => ({
     items: readRecentViews(),
 }));
 
+/**
+ * قائمة منسدلة في شريط ملاحّة قابل للتمرير أفقياً.
+ *
+ * ═══ لماذا توجد هذه الدالة أصلاً ═══
+ *
+ * `overflow-x-auto` بلا `overflow-y` صريحة تجعل المتصفح — حسب مواصفة CSS —
+ * يحسب `overflow-y` الفعلي أيضاً `auto` لا `visible`. فأي قائمة منسدلة
+ * `absolute` داخل الشريط تُقصّ عند حافته السفلية (٤٤px هنا) مهما كان
+ * ارتفاعها — قائمة المحافظات كانت تُفتح فعلياً (`open: true`، الروابط
+ * موجودة في DOM) لكن مرئيّة بمقدار بكسلين فقط قبل القصّ. هذا هو ما بلّغ
+ * عنه المستخدم: "المحافظات لا تظهر".
+ *
+ * والحل ليس `overflow-y-visible` على الشريط — المواصفة تمنع التقاءهما.
+ * الحل نقل اللوحة خارج الشريط تماماً (`x-teleport="body"`) وحساب موضعها
+ * من إحداثيات الزرّ الفعلية عبر `getBoundingClientRect()`، التي لا تتأثر
+ * باتجاه RTL أصلاً — فتعمل بلا تمييز اتجاه.
+ *
+ * ═══ لماذا لم يظهر نفس العطل في قائمة الأقسام ═══
+ *
+ * غلافها لم يحمل `relative`، فصار السياق المرجعي لموضعها الرأس نفسه لا
+ * الشريط — إفلاتٌ بالمصادفة لا بالتصميم. تعميم هذه الدالة عليها أيضاً
+ * يزيل الاعتماد على تلك المصادفة الهشة.
+ */
+Alpine.data('headerDropdown', (align = 'end') => ({
+    open: false,
+    top: 0,
+    right: null,
+    left: null,
+
+    toggle() {
+        this.open = !this.open;
+
+        if (this.open) {
+            this.$nextTick(() => this.reposition());
+        }
+    },
+
+    close() {
+        this.open = false;
+    },
+
+    reposition() {
+        const rect = this.$refs.trigger.getBoundingClientRect();
+        this.top = rect.bottom + 4;
+
+        // end في RTL يعني الحافة اليمنى — نفس ما كانت تفعله start-0 محلياً
+        if (align === 'end') {
+            this.right = window.innerWidth - rect.right;
+            this.left = null;
+        } else {
+            this.left = rect.left;
+            this.right = null;
+        }
+    },
+
+    get panelStyle() {
+        return {
+            top: `${this.top}px`,
+            right: this.right !== null ? `${this.right}px` : 'auto',
+            left: this.left !== null ? `${this.left}px` : 'auto',
+        };
+    },
+}));
+
 window.Alpine = Alpine;
 Alpine.start();

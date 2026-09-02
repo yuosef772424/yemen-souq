@@ -166,8 +166,8 @@
 
             {{-- المحافظة أولاً: في الإعلانات المبوّبة الموقع فلتر قبل أن يكون
                  تفصيلاً — لا أحد يشتري أريكة في محافظة لا يبلغها --}}
-            <div class="relative shrink-0" x-data="{ open: false }" @keydown.escape="open = false">
-                <button type="button" @click="open = !open" :aria-expanded="open"
+            <div class="shrink-0" x-data="headerDropdown()" @keydown.escape="close()">
+                <button type="button" x-ref="trigger" @click="toggle()" :aria-expanded="open"
                         class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-medium transition hover:bg-tint">
                     <svg class="size-4 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                          stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -178,19 +178,35 @@
                          stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                 </button>
 
-                <div x-show="open" x-cloak x-transition.opacity.duration.150ms @click.outside="open = false"
-                     class="absolute start-0 top-full z-40 mt-1 max-h-80 w-56 overflow-y-auto rounded-xl border border-line bg-white py-1 shadow-lg">
-                    <a href="{{ route('search', request()->except(['location', 'page'])) }}"
-                       @class(['block px-3 py-2 text-sm transition hover:bg-tint', 'font-semibold text-brand-dark' => ! $activeLocation])>
-                        كل المحافظات
-                    </a>
-                    @foreach ($nav->governorates() as $governorate)
-                        <a href="{{ route('search', [...request()->except(['page']), 'location' => $governorate->id]) }}"
-                           @class(['block px-3 py-2 text-sm transition hover:bg-tint', 'font-semibold text-brand-dark' => $activeLocation === $governorate->id])>
-                            {{ $governorate->name_ar }}
+                {{-- خارج الشريط القابل للتمرير عبر x-teleport — انظر تعليق
+                     headerDropdown في app.js لسبب وجوده --}}
+                <template x-teleport="body">
+                    {{-- @click.outside مقارنةً بموضع الزرّ لا العنصر الحاوي: بعد
+                         الترحيل الزرّ لم يعد أصلاً DOM للوحة، فبلا هذا الشرط
+                         يُحسَب نقر الزرّ نفسه "خارجاً" ويُغلقها في نفس النقرة
+                         التي فتحتها --}}
+                    {{-- بلا x-cloak: عنصر مُرحَّل بـx-teleport يُستنسَخ وقت
+                         معالجة التوجيه لا في المرور الأول الذي يُزيل x-cloak
+                         من شجرة DOM — فيبقى الوسم على النسخة المُرحَّلة إلى
+                         الأبد ويهزم x-show بقاعدة !important. وغير محتاج
+                         أصلاً: اللوحة تبدأ open:false فتُخفيها x-show نفسها
+                         قبل أي عرض --}}
+                    <div x-show="open"
+                         @click.outside="if (!$refs.trigger.contains($event.target)) close()"
+                         :style="panelStyle"
+                         class="fixed z-40 max-h-80 w-56 overflow-y-auto rounded-xl border border-line bg-white py-1 shadow-lg">
+                        <a href="{{ route('search', request()->except(['location', 'page'])) }}"
+                           @class(['block px-3 py-2 text-sm transition hover:bg-tint', 'font-semibold text-brand-dark' => ! $activeLocation])>
+                            كل المحافظات
                         </a>
-                    @endforeach
-                </div>
+                        @foreach ($nav->governorates() as $governorate)
+                            <a href="{{ route('search', [...request()->except(['page']), 'location' => $governorate->id]) }}"
+                               @class(['block px-3 py-2 text-sm transition hover:bg-tint', 'font-semibold text-brand-dark' => $activeLocation === $governorate->id])>
+                                {{ $governorate->name_ar }}
+                            </a>
+                        @endforeach
+                    </div>
+                </template>
             </div>
 
             <span class="h-5 w-px shrink-0 bg-line" aria-hidden="true"></span>

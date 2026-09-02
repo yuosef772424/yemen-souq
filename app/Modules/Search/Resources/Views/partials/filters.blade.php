@@ -1,3 +1,97 @@
+
+
+{{-- عملة الإعلان: لا فلتر ثابت هنا. الفلترة بعملة واحدة لا تنفع إلا حين
+     تختلط النتائج فعلياً — والقرار الأصوب أن يظهر خيار التضييق عند مكان
+     ظهور الاختلاط نفسه (شريط توزيع العملات في index.blade.php)، لا مكاناً
+     ثابتاً يُحمَّل مع كل صفحة سواء وُجد اختلاط أم لا --}}
+
+{{--
+    ═══ الأقسام: تنقّل هرمي لا قائمة مسطّحة ═══
+
+    كانت `<select>` واحدة تحمل أربعين خياراً — جدارٌ يُتخطّى كله، ويدفن
+    تحته «مواصفات التصنيف» وهي أدقّ الفلاتر وأنفعها (سعة التخزين، سنة
+    الصنع، الشركة المصنعة). والهرمي يعرض مستوىً واحداً في كل مرة مع طريق
+    عودة واضح — نفس ما تفعله منصات الإعلانات المبوّبة.
+
+    وروابط لا حقول: اختيار القسم **تنقّلٌ** لا تنقيح، لأنه يغيّر ما تعنيه
+    بقية الفلاتر (المواصفات المعروضة تتبدّل معه). وتأجيله حتى «طبّق»
+    يعني عرض مواصفات قسمٍ غير الذي يظنّه المستخدم مختاراً.
+
+    والقسم يُحمَل في حقل خفي كي لا تُسقطه بقية الفلاتر عند تطبيقها.
+--}}
+@php
+    // أبناء ما يُتصفَّح الآن: أبناء الجذر المفتوح، أو إخوة الفرع المفتوح
+    $branchParent = $parentCategory ?? $activeCategory;
+    $branchChildren = $branchParent?->children ?? collect();
+@endphp
+
+<fieldset class="rounded-2xl border border-line bg-white p-4">
+    <legend class="px-1 text-sm font-semibold">القسم</legend>
+
+    <input type="hidden" name="category" value="{{ $criteria->categoryId }}">
+
+    @if ($branchParent === null)
+        {{-- لا قسم مفتوح: الجذور وحدها --}}
+        <ul class="mt-2 space-y-0.5">
+            @foreach ($categories as $root)
+                <li>
+                    <a href="{{ route('search', [...request()->except(['page', 'attr', 'category']), 'category' => $root->id]) }}"
+                       class="flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm transition hover:bg-tint">
+                        <span class="flex min-w-0 items-center gap-2">
+                            @include('shared::partials.category-icon', ['icon' => $root->icon, 'class' => 'size-4 shrink-0 text-brand'])
+                            <span class="truncate">{{ $root->name_ar }}</span>
+                        </span>
+                        <svg class="size-3.5 shrink-0 text-muted rtl:rotate-180" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                            <path d="m9 18 6-6-6-6"/>
+                        </svg>
+                    </a>
+                </li>
+            @endforeach
+        </ul>
+    @else
+        {{-- طريق العودة أولاً: بلاه يصير التعمّق طريقاً بلا رجعة --}}
+        <a href="{{ route('search', request()->except(['page', 'attr', 'category'])) }}"
+           class="mt-2 flex items-center gap-1.5 text-xs font-medium text-muted transition hover:text-ink">
+            <svg class="size-3.5 rtl:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            كل الأقسام
+        </a>
+
+        <a href="{{ route('search', [...request()->except(['page', 'attr', 'category']), 'category' => $branchParent->id]) }}"
+           @class([
+               'mt-2 flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold transition',
+               'bg-brand/10 text-brand-dark' => $criteria->categoryId === $branchParent->id,
+               'hover:bg-tint' => $criteria->categoryId !== $branchParent->id,
+           ])>
+            @include('shared::partials.category-icon', ['icon' => $branchParent->icon, 'class' => 'size-4 shrink-0 text-brand'])
+            <span class="truncate">كل {{ $branchParent->name_ar }}</span>
+        </a>
+
+        @if ($branchChildren->isNotEmpty())
+            <ul class="mt-1 space-y-0.5 border-s border-line ps-3">
+                @foreach ($branchChildren as $child)
+                    <li>
+                        <a href="{{ route('search', [...request()->except(['page', 'attr', 'category']), 'category' => $child->id]) }}"
+                           @class([
+                               'block truncate rounded-lg px-2.5 py-1.5 text-sm transition',
+                               'bg-brand/10 font-semibold text-brand-dark' => $criteria->categoryId === $child->id,
+                               'text-muted hover:bg-tint hover:text-ink' => $criteria->categoryId !== $child->id,
+                           ])>
+                            {{ $child->name_ar }}
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    @endif
+</fieldset>
+
+{{-- المواصفات مباشرة تحت القسم وفوق السعر: هي أدقّ ما يملكه المستخدم
+     للتضييق («سعة التخزين» أنفع من نطاق سعري في قسم الجوالات)، ودفنها
+     أسفل اللوحة كان يجعلها غير مكتشَفة أصلاً --}}
+@include('search::partials.attribute-filters')
+
 {{-- ═══ السعر: العنصر المميّز في هذه الصفحة ═══ --}}
 <fieldset class="rounded-2xl border border-line bg-white p-4">
     <legend class="px-1 text-sm font-semibold">السعر</legend>
@@ -33,36 +127,6 @@
         النتائج تشمل الإعلانات بكل العملات إذا تساوت قيمتها الفعلية — لا الأرقام المتشابهة فقط.
     </p>
 </fieldset>
-
-{{-- عملة الإعلان: لا فلتر ثابت هنا. الفلترة بعملة واحدة لا تنفع إلا حين
-     تختلط النتائج فعلياً — والقرار الأصوب أن يظهر خيار التضييق عند مكان
-     ظهور الاختلاط نفسه (شريط توزيع العملات في index.blade.php)، لا مكاناً
-     ثابتاً يُحمَّل مع كل صفحة سواء وُجد اختلاط أم لا --}}
-
-{{-- ═══ التصنيف ═══ --}}
-<fieldset class="rounded-2xl border border-line bg-white p-4">
-    <legend class="px-1 text-sm font-semibold">التصنيف</legend>
-
-    <select name="category"
-            class="mt-2 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm focus:border-brand focus:outline-none">
-        <option value="">كل التصنيفات</option>
-        @foreach ($categories as $category)
-            <optgroup label="{{ $category->name_ar }}">
-                <option value="{{ $category->id }}" @selected($criteria->categoryId === $category->id)>
-                    كل {{ $category->name_ar }}
-                </option>
-                @foreach ($category->children as $child)
-                    <option value="{{ $child->id }}" @selected($criteria->categoryId === $child->id)>
-                        {{ $child->name_ar }}
-                    </option>
-                @endforeach
-            </optgroup>
-        @endforeach
-    </select>
-</fieldset>
-
-{{-- ═══ مواصفات التصنيف — بعد التصنيف مباشرة لأنها تابعة له ═══ --}}
-@include('search::partials.attribute-filters')
 
 {{-- ═══ الموقع ═══ --}}
 <fieldset class="rounded-2xl border border-line bg-white p-4">

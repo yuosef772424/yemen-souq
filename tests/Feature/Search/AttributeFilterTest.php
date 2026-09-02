@@ -289,4 +289,32 @@ class AttributeFilterTest extends TestCase
             ->assertSee('name="attr[mileage][max]"', false)
             ->assertSee('name="attr[transmission]"', false);
     }
+
+    /**
+     * القسم يبقى بعد تطبيق فلتر آخر.
+     *
+     * صار التنقّل بين الأقسام روابطَ لا `<select>` داخل النموذج — فبلا
+     * حقل خفي يحمله، يُسقط أولُ ضغط على «طبّق الفلاتر» القسمَ المفتوح
+     * ويعود المستخدم إلى السوق كله بلا أن يطلب ذلك.
+     */
+    #[Test]
+    public function applying_another_filter_keeps_the_open_category(): void
+    {
+        $this->get('/?category='.$this->category->id)
+            ->assertOk()
+            ->assertSee('name="category" value="'.$this->category->id.'"', false);
+    }
+
+    /** التنقّل الهرمي: الجذور وحدها بلا قسم، وطريق العودة بعد فتح واحد */
+    #[Test]
+    public function the_category_navigator_drills_down_and_offers_a_way_back(): void
+    {
+        // «كل <القسم>» لا تظهر إلا بعد فتح قسم — و«كل الأقسام» وحدها لا
+        // تصلح دليلاً لأن زرّها قائم في الترويسة على كل صفحة
+        $this->get('/')->assertOk()->assertDontSee('كل '.$this->category->name_ar);
+
+        $this->get('/?category='.$this->category->id)
+            ->assertOk()
+            ->assertSee('كل '.$this->category->name_ar);
+    }
 }

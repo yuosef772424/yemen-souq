@@ -23,6 +23,12 @@ class CategorySeeder extends Seeder
 
     /** الصفات المتاحة، ثم ربطها بالتصنيفات */
     private const ATTRIBUTES = [
+        // الشركة المصنعة قبل سنة الصنع في كل مكان تُستعمل فيه: هي الفلتر
+        // الأول عملياً عند شراء مركبة — «تويوتا» يضيّق قبل «٢٠١٨»، والعكس نادر
+        ['manufacturer', 'الشركة المصنعة', 'option', null, [
+            'تويوتا', 'هيونداي', 'كيا', 'نيسان', 'ميتسوبيشي', 'مرسيدس', 'بي إم دبليو',
+            'لكزس', 'فورد', 'شيفروليه', 'هوندا', 'مازدا', 'أخرى',
+        ]],
         ['year', 'سنة الصنع', 'number', 'سنة', null],
         ['mileage', 'الممشى', 'number', 'كم', null],
         ['transmission', 'ناقل الحركة', 'option', null, ['أوتوماتيك', 'عادي']],
@@ -39,9 +45,9 @@ class CategorySeeder extends Seeder
 
     /** slug التصنيف الفرعي => مفاتيح الصفات المرتبطة به */
     private const CATEGORY_ATTRIBUTES = [
-        'سيارات للبيع' => ['year', 'mileage', 'transmission', 'fuel'],
+        'سيارات للبيع' => ['manufacturer', 'year', 'mileage', 'transmission', 'fuel'],
         'دراجات نارية' => ['year', 'mileage'],
-        'شاحنات ومعدات' => ['year', 'mileage', 'fuel'],
+        'شاحنات ومعدات' => ['manufacturer', 'year', 'mileage', 'fuel'],
         'شقق للبيع' => ['rooms', 'bathrooms', 'area', 'floor', 'furnished'],
         'شقق للإيجار' => ['rooms', 'bathrooms', 'area', 'floor', 'furnished'],
         'أراضي' => ['area'],

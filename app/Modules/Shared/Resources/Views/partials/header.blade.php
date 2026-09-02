@@ -135,6 +135,23 @@
                    class="rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-ink">دخول</a>
             @endauth
 
+            {{-- تذكير رقم غير موثَّق — نمطٌ شائع في منصّات الإعلانات
+                 المبوّبة (وثّق حسابك في دوبيزل مثلاً): ظاهرٌ باستمرار لا
+                 مرة عند النشر، فالمستخدم يوثّق حين يناسبه لا حين يُضطرّ --}}
+            @auth
+                @unless (auth()->user()->hasVerifiedPhone())
+                    <a href="{{ route('phone.verify') }}"
+                       class="hidden shrink-0 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 sm:flex">
+                        <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 9v4"/><path d="M12 17h.01"/>
+                            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
+                        </svg>
+                        وثّق رقمك
+                    </a>
+                @endunless
+            @endauth
+
             <a href="{{ route('listing.create') }}"
                class="shrink-0 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand sm:px-4">
                 <span class="hidden sm:inline">أضف إعلانك</span>

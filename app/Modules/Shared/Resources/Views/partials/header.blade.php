@@ -33,10 +33,15 @@
             <span class="hidden text-base font-semibold sm:block">سوق يمني</span>
         </a>
 
-        {{-- البحث: يأخذ السطر كاملاً على الجوال، ويتوسّط الترويسة على ما فوقه.
-             `order` يضعه تحت الشعار والأزرار على الضيّق بلا تكرار العنصر --}}
+        {{-- البحث بجانب الشعار على كل المقاسات.
+
+             كان يأخذ سطراً كاملاً تحتهما على الجوال، وكان ذلك صحيحاً حين
+             كانت الأزرار (دخول، أضف إعلانك، أربعة رموز) تزاحمه في سطر
+             الشعار. وبعد أن انتقلت كلها إلى الشريط السفلي صار سطر الشعار
+             شبه فارغ — وسطران حيث يكفي واحد يعني ترويسة تشغل خُمس شاشة
+             الهاتف قبل أن يظهر أول إعلان. --}}
         <form method="GET" action="{{ route('search') }}"
-              class="order-last flex w-full min-w-0 items-center gap-2 md:order-none md:flex-1">
+              class="flex min-w-0 flex-1 items-center gap-2">
             <label class="sr-only" for="site-search">ابحث في الإعلانات</label>
             <div class="relative min-w-0 flex-1">
                 {{-- بلا `maxlength` من ثابت وحدة البحث: الترويسة في Shared، وShared
@@ -83,15 +88,25 @@
                     موضع العدّاد الصحيح هو الدفع في التطبيق: هناك يصل الرقم مع
                     الإشعار بلا استعلام، وهناك يُقرأ والشاشة مقفلة.
                 --}}
+                {{-- على الجوال: الإشعارات وحدها تبقى هنا.
+
+                     المفضلة والرسائل والحساب صارت تبويبات في الشريط السفلي،
+                     وتكرارها أعلى الشاشة يزاحم البحث في ترويسةٍ تشغل خُمس
+                     شاشة الهاتف أصلاً. والإشعارات لا مقابل لها في الشريط
+                     لأنها حسّاسة للوقت: تُقرأ حين تصل لا حين يتذكّرها
+                     المستخدم — ولهذا تبقى ظاهرة دائماً. --}}
                 <nav class="flex items-center" aria-label="حسابي">
                     @foreach ([
-                        ['route' => 'account.favorites', 'label' => 'المفضلة', 'icon' => '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>'],
-                        ['route' => 'account.listings', 'label' => 'إعلاناتي', 'icon' => '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>'],
-                        ['route' => 'account.notifications', 'label' => 'الإشعارات', 'icon' => '<path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M21 8.5c0-3.6-2.9-6.5-6.5-6.5h-5C5.9 2 3 4.9 3 8.5c0 6-2 7.5-2 7.5h22s-2-1.5-2-7.5"/>'],
-                        ['route' => 'account.messages', 'label' => 'رسائلي', 'icon' => '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>'],
+                        ['route' => 'account.favorites', 'label' => 'المفضلة', 'mobile' => false, 'icon' => '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>'],
+                        ['route' => 'account.listings', 'label' => 'إعلاناتي', 'mobile' => false, 'icon' => '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>'],
+                        ['route' => 'account.notifications', 'label' => 'الإشعارات', 'mobile' => true, 'icon' => '<path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M21 8.5c0-3.6-2.9-6.5-6.5-6.5h-5C5.9 2 3 4.9 3 8.5c0 6-2 7.5-2 7.5h22s-2-1.5-2-7.5"/>'],
+                        ['route' => 'account.messages', 'label' => 'رسائلي', 'mobile' => false, 'icon' => '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>'],
                     ] as $item)
                         <a href="{{ route($item['route']) }}" title="{{ $item['label'] }}"
-                           class="rounded-lg p-2 text-muted transition hover:bg-tint hover:text-ink">
+                           @class([
+                               'rounded-lg p-2 text-muted transition hover:bg-tint hover:text-ink',
+                               'hidden md:block' => ! $item['mobile'],
+                           ])>
                             <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 {!! $item['icon'] !!}
@@ -103,7 +118,7 @@
 
                 {{-- الحساب والخروج خلف قائمة: يُفتحان مرةً كل عدة أشهر، ووجودهما
                      ظاهرَين يزاحم ما يُفتح كل زيارة --}}
-                <div class="relative" x-data="{ open: false }" @keydown.escape="open = false">
+                <div class="relative hidden md:block" x-data="{ open: false }" @keydown.escape="open = false">
                     <button type="button" @click="open = !open" :aria-expanded="open"
                             class="flex items-center gap-1 rounded-lg p-1.5 transition hover:bg-tint">
                         @if (auth()->user()->avatarUrl())
@@ -131,8 +146,9 @@
                     </div>
                 </div>
             @else
+                {{-- تبويب «حسابي» في الشريط السفلي يسوق الضيف إلى الدخول --}}
                 <a href="{{ route('login') }}"
-                   class="rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-ink">دخول</a>
+                   class="hidden rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-ink md:block">دخول</a>
             @endauth
 
             {{-- تذكير رقم غير موثَّق — نمطٌ شائع في منصّات الإعلانات
@@ -152,10 +168,10 @@
                 @endunless
             @endauth
 
+            {{-- زرّ «+» المرفوع في الشريط السفلي يقوم مقامه على الجوال --}}
             <a href="{{ route('listing.create') }}"
-               class="shrink-0 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand sm:px-4">
-                <span class="hidden sm:inline">أضف إعلانك</span>
-                <span class="sm:hidden">أضف</span>
+               class="hidden shrink-0 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand md:block">
+                أضف إعلانك
             </a>
         </div>
     </div>

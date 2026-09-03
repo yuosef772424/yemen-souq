@@ -63,6 +63,43 @@ button,
     }
 }
 
+/* ═══ شريط التقدّم أثناء التنقّل ═══
+
+   يقف عند ٩٠٪ ولا يكتمل: الاكتمال الحقيقي هو مغادرة الصفحة، وشريطٌ يبلغ
+   المئة ثم ينتظر يكذب على المستخدم. والتباطؤ (cubic-bezier نازل) يحاكي
+   ما يحدث فعلاً — أول بايت سريع ثم انتظار.
+
+   ولا `display: none` عند الخمول: العنصر موجود دائماً بعرض صفر، فتبدأ
+   الحركة من أول إطار بلا إعادة تخطيط. */
+.nav-progress {
+    position: fixed;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: 60;
+    height: 3px;
+    width: 0;
+    background: var(--color-brand);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.nav-progress.is-active {
+    width: 90%;
+    opacity: 1;
+    transition:
+        width 8s cubic-bezier(0.1, 0.8, 0.2, 1),
+        opacity 0.15s;
+}
+
+/* من يطلب تقليل الحركة يرى شريطاً ثابتاً لا زاحفاً: الإشارة تصله،
+   والحركة الطويلة هي ما يُتعب لا وجود الشريط */
+@media (prefers-reduced-motion: reduce) {
+    .nav-progress.is-active {
+        width: 90%;
+        transition: opacity 0.15s;
+    }
+}
+
 /* شريط تمرير مخفيّ حيث يقوم غيره مقامه: معرض الصور يدلّ على موضعه
    بعدّاد ومصغّرات، وشريط تمرير فوقهما ضجيجٌ لا يظهر في أي تطبيق أصلي.
    والتمرير نفسه يبقى عاملاً — الإخفاء بصريّ لا وظيفيّ. */

@@ -242,7 +242,9 @@
                 </a>
             </div>
         @else
-            <ul class="mt-4 space-y-3">
+            {{-- data-results: يمسكها JS ليستبدلها بالهيكل لحظة بدء
+                 التنقّل — انظر resources/js/app.js --}}
+            <ul class="mt-4 space-y-3" data-results>
                 @foreach ($listings as $i => $listing)
                     @include('search::partials.listing-card', [
                         'listing' => $listing,
@@ -253,6 +255,16 @@
                     ])
                 @endforeach
             </ul>
+
+            {{-- قالب الهيكل: يعيش في <template> فلا يُرسَم ولا يُقرأ حتى
+                 يستنسخه JS. وبناؤه في Blade لا في JS بقصد — الأبعاد يجب
+                 أن تُقرأ بجوار البطاقة التي تحاكيها، ونصٌّ داخل سلسلة JS
+                 يُنسى عند أول تعديل في البطاقة --}}
+            <template data-results-skeleton>
+                @for ($i = 0; $i < 4; $i++)
+                    @include('search::partials.listing-card-skeleton')
+                @endfor
+            </template>
 
             <div class="mt-8">
                 {{ $listings->links() }}

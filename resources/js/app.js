@@ -298,5 +298,124 @@ Alpine.data('gallery', () => ({
     },
 }));
 
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * تغذية راجعة أثناء التنقّل
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * ═══ المشكلة، وحدّ ما يمكن حلّه هنا ═══
+ *
+ * الموقع يُصيَّر على الخادم: كل ضغطة تُحمّل صفحة كاملة. وبين الضغطة ووصول
+ * أول بايت يبقى المتصفح عارضاً **الصفحة القديمة** بلا أي إشارة — فتبدو
+ * الضغطة ضائعة، ويضغط المستخدم ثانيةً.
+ *
+ * ولا يمكن هنا رسم هيكل الصفحة **القادمة**: لم تصل بعد، ورسمُه يعني
+ * نسخةً هيكلية لكل صفحة تُصان بالتوازي مع أصلها — مصدر حقيقة ثانٍ ينحرف
+ * عند أول تعديل. فالمعالجة على مستويين بحسب ما نعرفه فعلاً:
+ *
+ *   1. **أي تنقّل**: شريط تقدّم علوي. لا يحتاج معرفة الوجهة.
+ *   2. **الفلترة والتصنيف داخل صفحة النتائج**: نعرف يقيناً أن الوجهة
+ *      صفحة نتائج، وأن المتغيّر هو الشبكة وحدها — فتُستبدل بهيكل مطابق
+ *      فوراً. هيكل واحد يغطّي أكثر انتقال استعمالاً.
+ */
+
+/** يبدأ من ٩٠٪ ولا يكتمل: الاكتمال يقع بمغادرة الصفحة نفسها */
+function navigationFeedback() {
+    const bar = document.createElement('div');
+    bar.className = 'nav-progress';
+    document.body.appendChild(bar);
+
+    let running = false;
+
+    const start = () => {
+        if (running) {
+            return;
+        }
+
+        running = true;
+        bar.classList.add('is-active');
+        swapResultsForSkeleton();
+    };
+
+    /**
+     * استبدال النتائج بالهيكل — في صفحة النتائج وحدها.
+     *
+     * `<template>` لا يُرسَم محتواه ولا يُقرأ بالقارئ الشاشي حتى يُستنسخ،
+     * فوجوده في كل صفحة نتائج بلا تكلفة عرض.
+     */
+    function swapResultsForSkeleton() {
+        const results = document.querySelector('[data-results]');
+        const template = document.querySelector('[data-results-skeleton]');
+
+        if (!results || !template) {
+            return;
+        }
+
+        // الارتفاع يُثبَّت قبل الاستبدال: هيكلٌ أقصر من النتائج يقفز
+        // بالصفحة لأعلى، وهو ارتداد يُشعر بالبطء أكثر من الانتظار نفسه
+        results.style.minHeight = `${results.offsetHeight}px`;
+        results.replaceChildren(template.content.cloneNode(true));
+    }
+
+    /**
+     * ما يُستثنى من الشريط — وكلٌّ منها كان سيُنتج شريطاً لا ينتهي:
+     * زرّ الفأرة الأوسط وCtrl يفتحان تبويباً جديداً والصفحة الحالية باقية،
+     * والروابط الخارجية والتنزيلات تغادر نطاقنا، والمرساة (#) لا تُحمّل
+     * شيئاً أصلاً.
+     */
+    document.addEventListener('click', (event) => {
+        if (event.defaultPrevented || event.button !== 0) {
+            return;
+        }
+
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+            return;
+        }
+
+        const link = event.target.closest('a[href]');
+
+        if (!link || link.hasAttribute('download') || (link.target && link.target !== '_self')) {
+            return;
+        }
+
+        const url = new URL(link.href, location.href);
+
+        if (url.origin !== location.origin) {
+            return;
+        }
+
+        // نفس الصفحة أو مجرّد مرساة فيها
+        if (url.href === location.href || (url.hash && url.pathname === location.pathname)) {
+            return;
+        }
+
+        start();
+    });
+
+    document.addEventListener('submit', (event) => {
+        if (!event.defaultPrevented) {
+            start();
+        }
+    });
+
+    /**
+     * العودة بالزرّ الخلفي تُعيد الصفحة من ذاكرة المتصفح كما غادرَتْ —
+     * أي والشريط ظاهر والنتائج مستبدَلة بالهيكل. `pageshow` مع `persisted`
+     * هي الإشارة الوحيدة التي تُميّز هذه الحالة، وبلاها يرى العائد هيكلاً
+     * لا يمتلئ أبداً.
+     */
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+            location.reload();
+        }
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', navigationFeedback);
+} else {
+    navigationFeedback();
+}
+
 window.Alpine = Alpine;
 Alpine.start();

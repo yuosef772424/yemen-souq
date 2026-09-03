@@ -27,7 +27,7 @@
                    class="flex gap-3.5 p-4 transition hover:bg-tint">
                     <div class="size-14 shrink-0 overflow-hidden rounded-xl bg-tint">
                         @if ($conversation->listing?->images->isNotEmpty())
-                            <img src="{{ asset('storage/' . ($conversation->listing->images->first()->thumb_path ?? $conversation->listing->images->first()->path)) }}"
+                            <img src="{{ $conversation->listing->images->first()->thumbUrl() }}"
                                  alt="" loading="lazy" class="size-full object-cover">
                         @endif
                     </div>

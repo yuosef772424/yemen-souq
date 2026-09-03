@@ -5,7 +5,6 @@ namespace App\Modules\Api\Http\Resources;
 use App\Modules\Catalog\Models\ListingImage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * @mixin ListingImage
@@ -23,10 +22,11 @@ class ListingImageResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'url' => Storage::disk('public')->url($this->path),
-            'thumb_url' => $this->thumb_path === null
-                ? null
-                : Storage::disk('public')->url($this->thumb_path),
+            // نفس مُنشئ الرابط الذي تستعمله القوالب: عقدُ التطبيق والويب
+            // واحد، وقرصان مختلفان بينهما يعنيان تطبيقاً يرى صوراً
+            // ومتصفّحاً لا يراها
+            'url' => $this->url(),
+            'thumb_url' => $this->thumb_path === null ? null : $this->thumbUrl(),
             'width' => $this->width,
             'height' => $this->height,
             'is_primary' => (bool) $this->is_primary,

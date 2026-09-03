@@ -11,7 +11,7 @@
         'id' => $listing->id,
         'title' => $listing->title,
         'price' => $listing->formattedPrice(),
-        'image' => $recentThumb ? asset('storage/' . ($recentThumb->thumb_path ?? $recentThumb->path)) : null,
+        'image' => $recentThumb ? $recentThumb->thumbUrl() : null,
         'url' => route('listing.show', $listing),
     ];
 @endphp
@@ -56,7 +56,7 @@
                 <div x-ref="track" @scroll.passive.debounce.60ms="sync()"
                      class="flex aspect-[16/10] snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-smooth bg-tint scrollbar-none">
                     @forelse ($listing->images as $index => $image)
-                        <img src="{{ asset('storage/' . $image->path) }}"
+                        <img src="{{ $image->url() }}"
                              alt="{{ $listing->title }} — صورة {{ $index + 1 }}"
                              {{-- أول صورة eager: هي ما يراه الزائر قبل أي سحب --}}
                              loading="{{ $index === 0 ? 'eager' : 'lazy' }}"
@@ -101,7 +101,7 @@
                                 :class="active === {{ $index }} ? 'ring-2 ring-brand' : 'ring-1 ring-line'"
                                 class="size-16 shrink-0 overflow-hidden rounded-lg transition active:scale-95"
                                 aria-label="الصورة {{ $index + 1 }}">
-                            <img src="{{ asset('storage/' . $image->path) }}" alt="" loading="lazy"
+                            <img src="{{ $image->url() }}" alt="" loading="lazy"
                                  class="size-full object-cover">
                         </button>
                     @endforeach

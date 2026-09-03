@@ -40,7 +40,17 @@ final class ListingImageService
 
     private const THUMB_QUALITY = 70;
 
-    private const DISK = 'public';
+    /**
+     * قرص الوسائط — يُقرأ من الإعداد لا ثابتاً.
+     *
+     * كان ثابتاً `'public'`، وهو ما يجعل `MEDIA_DISK=s3` بلا أثر: تُبنى
+     * الروابط من القرص الجديد وتبقى الكتابة على القديم، فترفع الصورة
+     * وتُحفظ وتُطلب من مكان لا وجود لها فيه.
+     */
+    private function disk(): string
+    {
+        return (string) config('filesystems.media', 'public');
+    }
 
     /**
      * @param  array<int, UploadedFile>  $uploads
@@ -90,7 +100,7 @@ final class ListingImageService
         $directory = "listings/{$listing->id}";
         $name = Str::lower(Str::random(16));
 
-        Storage::disk(self::DISK)->makeDirectory($directory);
+        Storage::disk($this->disk())->makeDirectory($directory);
 
         // القراءة تُصحّح الاتجاه تلقائياً من EXIF (autoOrientation في config/image.php)
         $full = Image::read($upload->getRealPath())->scaleDown(width: self::MAX_WIDTH);
@@ -100,12 +110,12 @@ final class ListingImageService
 
         $path = "{$directory}/{$name}.webp";
         $encoded = (string) $full->toWebp(self::QUALITY);
-        Storage::disk(self::DISK)->put($path, $encoded);
+        Storage::disk($this->disk())->put($path, $encoded);
 
         // قراءة ثانية للمصغّرة: كائن Intervention قابل للتغيير،
         // فالتصغير الأول عدّل النسخة الأصلية في الذاكرة
         $thumbPath = "{$directory}/{$name}-thumb.webp";
-        Storage::disk(self::DISK)->put(
+        Storage::disk($this->disk())->put(
             $thumbPath,
             (string) Image::read($upload->getRealPath())
                 ->scaleDown(width: self::THUMB_WIDTH)
@@ -130,7 +140,7 @@ final class ListingImageService
     {
         $listing = $image->listing;
 
-        Storage::disk(self::DISK)->delete(array_filter([$image->path, $image->thumb_path]));
+        Storage::disk($this->disk())->delete(array_filter([$image->path, $image->thumb_path]));
 
         $image->delete();
 
@@ -142,7 +152,7 @@ final class ListingImageService
     /** حذف كل صور إعلان — يُستدعى قبل حذف الإعلان نهائياً */
     public function deleteAll(Listing $listing): void
     {
-        Storage::disk(self::DISK)->deleteDirectory("listings/{$listing->id}");
+        Storage::disk($this->disk())->deleteDirectory("listings/{$listing->id}");
 
         $listing->images()->delete();
     }

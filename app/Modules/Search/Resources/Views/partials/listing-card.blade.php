@@ -30,7 +30,7 @@
         <a href="{{ route('listing.show', [$listing, ...$trackingParams]) }}"
            class="relative block size-28 shrink-0 overflow-hidden rounded-xl bg-tint sm:size-36">
             @if ($image)
-                <img src="{{ asset('storage/' . ($image->thumb_path ?? $image->path)) }}"
+                <img src="{{ $image->thumbUrl() }}"
                      alt="{{ $listing->title }}" loading="lazy" class="size-full object-cover">
 
                 @if ($listing->images->count() > 1)

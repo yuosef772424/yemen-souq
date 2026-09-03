@@ -126,7 +126,7 @@ class User extends Authenticatable
     {
         $path = $this->profile?->avatar_path;
 
-        return $path === null ? null : Storage::disk('public')->url($path);
+        return $path === null ? null : Storage::disk(config('filesystems.media', 'public'))->url($path);
     }
 
     public function hasVerifiedPhone(): bool

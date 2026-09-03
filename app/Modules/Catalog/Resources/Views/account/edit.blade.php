@@ -189,7 +189,7 @@
                 <ul class="mt-2 grid grid-cols-3 gap-3 sm:grid-cols-4">
                     @foreach ($listing->images as $image)
                         <li class="relative overflow-hidden rounded-lg border border-line">
-                            <img src="{{ asset('storage/' . ($image->thumb_path ?? $image->path)) }}"
+                            <img src="{{ $image->thumbUrl() }}"
                                  alt="" loading="lazy" class="aspect-square w-full object-cover">
 
                             @if ($image->is_primary)

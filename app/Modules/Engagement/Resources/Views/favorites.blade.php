@@ -17,7 +17,7 @@
                 <div class="flex gap-3.5">
                     <div class="size-20 shrink-0 overflow-hidden rounded-xl bg-tint">
                         @if ($listing->images->isNotEmpty())
-                            <img src="{{ asset('storage/' . ($listing->images->first()->thumb_path ?? $listing->images->first()->path)) }}"
+                            <img src="{{ $listing->images->first()->thumbUrl() }}"
                                  alt="" loading="lazy" class="size-full object-cover">
                         @else
                             <div class="grid size-full place-items-center text-[10px] text-muted">لا صورة</div>

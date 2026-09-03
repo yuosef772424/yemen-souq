@@ -33,6 +33,23 @@ if ! printf '%s' "${APP_URL:-}" | grep -qE '^https?://[A-Za-z0-9]'; then
     exit 1
 fi
 
+# ═══ القرص الدائم يُهيَّأ قبل أي شيء يكتب فيه ═══
+#
+# المنصّة تركّب القرص مجلداً فارغاً **مملوكاً لـroot**، وFrankenPHP يعمل
+# بـwww-data. فبلا هذين السطرين ينجح الإقلاع ويفشل أول رفع صورة وحده
+# بـ"Permission denied" — عطلٌ لا يظهر إلا حين يجرّبه معلن حقيقي.
+#
+# و`chown` غير تعاودي بقصد: الجذر وحده يكفي لأن لارافل ينشئ ما تحته
+# بمالكه الصحيح، والتعاودي على قرصٍ فيه آلاف الصور يطيل كل إقلاع بلا
+# مقابل.
+#
+# والشرط على المتغيّر لا على وجود المسار: بلا `FILESYSTEM_PUBLIC_ROOT`
+# يبقى السلوك المحلي كما هو — لا قرص ولا تهيئة.
+if [ -n "${FILESYSTEM_PUBLIC_ROOT:-}" ]; then
+    mkdir -p "$FILESYSTEM_PUBLIC_ROOT"
+    chown www-data:www-data "$FILESYSTEM_PUBLIC_ROOT"
+fi
+
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
@@ -48,7 +65,11 @@ if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
 
     # الرابط يُنشأ بعد الهجرة لا قبلها: نظام الملفات هنا مؤقّت، والرابط
     # يختفي مع كل إعادة نشر — فإنشاؤه عند الإقلاع لا مرةً عند البناء
-    php artisan storage:link
+    #
+    # و--force ضرورية مع القرص الدائم: الرابط القديم قد يبقى في الصورة
+    # مشيراً إلى المسار المؤقّت، وبلا الإجبار يتخطّاه الأمر بصمت
+    # («الرابط موجود») فتُطلب الصور من مجلد فارغ.
+    php artisan storage:link --force
 fi
 
 # ═══ المنفذ تُمليه المنصة لا الصورة ═══

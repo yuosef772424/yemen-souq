@@ -38,9 +38,23 @@ return [
             'report' => false,
         ],
 
+        /*
+        | جذر قابل للضبط — وهو ما يمنع فقدان صور الإعلانات عند كل نشر.
+        |
+        | نظام ملفات الحاوية مؤقّت: يُبنى من الصورة عند الإقلاع ويختفي عند
+        | إعادة النشر. فصورةٌ رفعها معلن أمس تختفي اليوم بلا أثر في أي
+        | سجلّ — الصفّ باقٍ في `listing_images` والملف ذهب، فتظهر البطاقة
+        | بمربّع فارغ.
+        |
+        | والعلاج قرصٌ دائم (Volume) يُركَّب على مسار خارج الصورة، ويُشار
+        | إليه بهذا المتغيّر. والقيمة الافتراضية تُبقي التطوير المحلي كما
+        | هو تماماً — لا قرص ولا إعداد.
+        |
+        | انظر docs/architecture/deployment.md لخطوات التركيب.
+        */
         'public' => [
             'driver' => 'local',
-            'root' => storage_path('app/public'),
+            'root' => env('FILESYSTEM_PUBLIC_ROOT', storage_path('app/public')),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
             'visibility' => 'public',
             'throw' => false,
@@ -74,7 +88,10 @@ return [
     */
 
     'links' => [
-        public_path('storage') => storage_path('app/public'),
+        // نفس مصدر الجذر أعلاه لا `storage_path` ثابتاً: الرابط الذي يخدم
+        // الصور يجب أن يشير حيث تُكتب فعلاً — وقيمتان منفصلتان لمسار واحد
+        // تفترقان عند أول نشر، فتُكتب الصور في القرص وتُطلب من مجلد فارغ
+        public_path('storage') => env('FILESYSTEM_PUBLIC_ROOT', storage_path('app/public')),
     ],
 
 ];

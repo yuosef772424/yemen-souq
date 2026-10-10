@@ -1,8 +1,11 @@
 <?php
 
+use App\Modules\Shared\Http\Problem\ApiProblemException;
+use App\Modules\Shared\Http\Problem\ProblemDetails;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -42,5 +45,37 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        /**
+         * أخطاء ‎/api/*‎ بصيغة RFC 9457 — انظر ProblemDetails.
+         *
+         * ثلاثة أسطر لا أكثر، والمنطق كله في Shared/Http/Problem: هذا
+         * الملف يُقرأ مرة ولا يُختبر، وما يعيش في صنفٍ يُختبر.
+         *
+         * والفحص داخل `ProblemDetails::render` لا هنا: callback يعيد null
+         * لغير ‎/api‎ فيتابع لارافل مساره المعتاد (صفحات الويب وإعادة
+         * التوجيه) بلا تغيير.
+         */
+        $exceptions->render(
+            fn (Throwable $e, Request $request) => ProblemDetails::render($e, $request)
+        );
+
+        // ما عدا الـcallback: كل ما يخصّ ‎/api‎ يُعرض JSON حتى لو غابت
+        // ترويسة Accept، فلا يتسرّب إليه HTML من مسارٍ لا يمرّ بوسيط
+        // ForceJsonResponse (404 على مسار غير موجود).
+        $exceptions->shouldRenderJsonWhen(
+            fn (Request $request, Throwable $e): bool => $request->is('api/*') || $request->expectsJson()
+        );
+
+        // خدمة تُلقي ApiProblemException قد تُستدعى من الويب أيضاً
+        $exceptions->map(
+            ApiProblemException::class,
+            fn (ApiProblemException $e): Throwable => ProblemDetails::handles(request())
+                ? $e
+                : ProblemDetails::forWeb($e)
+        );
+
+        // خطأ العميل المقصود (4xx) ليس عطلاً يستحق سطراً في السجلّ
+        $exceptions->dontReportWhen(
+            fn (Throwable $e): bool => $e instanceof ApiProblemException && $e->status < 500
+        );
     })->create();

@@ -104,6 +104,30 @@ class SmsChannelVisibilityTest extends TestCase
         );
     }
 
+    /** على مستوى الخدمة مباشرة: حفظ قنوات أخرى لا يمسّ sms المحفوظ، مفعَّلةً كانت أم لا */
+    #[Test]
+    public function saving_other_channels_never_wipes_a_saved_sms_choice(): void
+    {
+        $resolver = app(PreferenceResolver::class);
+
+        config(['sms.enabled' => true]);
+        $resolver->save($this->user, NotificationType::NewMessage, ['sms' => true]);
+
+        foreach ([false, true] as $enabled) {
+            config(['sms.enabled' => $enabled]);
+
+            $resolver->save($this->user, NotificationType::NewMessage, ['push' => false, 'email' => true]);
+
+            $this->assertDatabaseHas('notification_preferences', [
+                'user_id' => $this->user->id,
+                'notification_type' => NotificationType::NewMessage->value,
+                'sms' => true,
+                'push' => false,
+                'email' => true,
+            ]);
+        }
+    }
+
     #[Test]
     public function a_saved_sms_preference_does_not_make_the_sender_try_a_disabled_channel(): void
     {

@@ -2,12 +2,13 @@
 
 namespace App\Modules\Api\Http\Controllers;
 
-use App\Models\User;
-use App\Modules\Analytics\Events\EventName;
-use App\Modules\Analytics\Services\EventRecorder;
 use App\Modules\Api\Http\Resources\ListingDetailResource;
 use App\Modules\Api\Http\Resources\ListingResource;
 use App\Modules\Api\Support\Pagination;
+use App\Modules\Catalog\Actions\ListingSaveResult;
+use App\Modules\Catalog\Actions\PublishListing;
+use App\Modules\Catalog\Actions\ToggleListingSold;
+use App\Modules\Catalog\Actions\UpdateListing;
 use App\Modules\Catalog\Http\Requests\StoreListingRequest;
 use App\Modules\Catalog\Http\Requests\UpdateListingRequest;
 use App\Modules\Catalog\Models\Listing;
@@ -15,12 +16,11 @@ use App\Modules\Catalog\Models\ListingImage;
 use App\Modules\Catalog\Services\ListingAttributes;
 use App\Modules\Catalog\Services\ListingImageService;
 use App\Modules\Catalog\Services\ListingRenewalService;
-use App\Modules\Catalog\Services\ListingSaleMarker;
 use App\Modules\Catalog\Services\ListingStatsReader;
+use App\Modules\Catalog\Services\OwnerListings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -54,15 +54,15 @@ use Illuminate\Support\Facades\Gate;
  */
 class MyListingController
 {
-    private const TABS = ['live', 'sold', 'expired', 'trashed', 'all'];
-
     public function __construct(
         private readonly ListingImageService $images,
         private readonly ListingRenewalService $renewal,
         private readonly ListingStatsReader $stats,
-        private readonly ListingSaleMarker $sales,
         private readonly ListingAttributes $attributes,
-        private readonly EventRecorder $events,
+        private readonly OwnerListings $owned,
+        private readonly PublishListing $publish,
+        private readonly UpdateListing $updateListing,
+        private readonly ToggleListingSold $toggleSale,
     ) {}
 
     // ─── إعلاناتي ───
@@ -71,16 +71,14 @@ class MyListingController
     {
         $user = $request->user();
 
-        $tab = in_array($request->string('tab')->value(), self::TABS, true)
-            ? $request->string('tab')->value()
-            : 'live';
+        $tab = $this->owned->resolveTab($request->string('tab')->value());
 
-        $listings = $this->paginate($user, $tab, Pagination::perPage($request));
+        $listings = $this->owned->paginate($user, $tab, Pagination::perPage($request));
 
         return ListingResource::collection($listings)->additional([
             'meta' => [
                 'tab' => $tab,
-                'counts' => $this->counts($user),
+                'counts' => $this->owned->counts($user),
             ],
         ]);
     }
@@ -110,48 +108,22 @@ class MyListingController
 
     public function store(StoreListingRequest $request): JsonResponse
     {
-        // الإعلان في معاملة، والصور بعدها: فشل صورة لا يجب أن يُلغي
-        // إعلاناً صحيحاً
-        $listing = DB::transaction(function () use ($request): Listing {
-            $listing = Listing::create([
-                ...$request->safe()->except('images', 'attributes'),
-                'user_id' => $request->user()->id,
-                'status' => 'active',
-                'published_at' => now(),
-                'expires_at' => now()->addDays(30),
-            ]);
+        // المعاملة والمواصفات والصور والحدث كلها في `PublishListing`
+        $result = ($this->publish)(
+            $request->user(),
+            $request->safe()->except('images', 'attributes'),
+            $request->validated('attributes', []),
+            $request->file('images', []),
+        );
 
-            // داخل المعاملة مع الإعلان لا بعدها: إعلان سيارة بلا سنة صنع
-            // ولا ممشى إعلانٌ ناقص، بخلاف الصور التي يصحّ الإعلان بدونها
-            $this->attributes->write($listing, $request->validated('attributes', []));
-
-            return $listing;
-        });
-
-        $result = $this->images->attach($listing, $request->file('images', []));
-
-        // بلا هذا الحدث يبقى listings_created في funnel_daily أعمى عن
-        // كل ما يُنشر من التطبيق
-        $this->events->record(EventName::ListingCreated, 'listing', $listing->id, [
-            'category_id' => $listing->category_id,
-            'currency' => $listing->currency_code,
-            'images' => $result['stored'],
-        ]);
-
-        return $this->saved($listing, $result, 'نُشر الإعلان.', 201);
+        return $this->saved($result, 'نُشر الإعلان.', 201);
     }
 
     /**
      * التعديل.
      *
-     * ما لا يفعله مقصود بقدر ما يفعله — نفس قائمة `AccountListingController`:
-     * لا يغيّر `slug` (رابطٌ منشور في واتساب ومحفوظ في مفضلة زائر)، ولا
-     * يمسّ `price_in_base` ولا `search_blob` (يعيد `ListingObserver`
-     * حسابها)، ولا يسجّل تغيّر السعر (الـObserver يكتب السجلّ).
-     *
-     * والمواصفات تُكتب **بعد** الحفظ: `ListingAttributes::write` تقرأ
-     * `category_id` من النموذج، فلو سبقت الحفظ لكتبت صفات التصنيف
-     * القديم على إعلان صار غيره.
+     * ما لا يفعله وترتيب خطواته (حقول ثم مواصفات ثم صور) موثّقان في
+     * `UpdateListing`، وهو ما يستدعيه الويب أيضاً.
      *
      * ═══ ولماذا POST لا PATCH ═══
      *
@@ -168,13 +140,14 @@ class MyListingController
     {
         Gate::authorize('update', $listing);
 
-        $listing->update($request->safe()->except('images', 'attributes'));
+        $result = ($this->updateListing)(
+            $listing,
+            $request->safe()->except('images', 'attributes'),
+            $request->validated('attributes', []),
+            $request->file('images', []),
+        );
 
-        $this->attributes->write($listing, $request->validated('attributes', []));
-
-        $result = $this->images->attach($listing, $request->file('images', []));
-
-        return $this->saved($listing, $result, 'حُدِّث الإعلان.');
+        return $this->saved($result, 'حُدِّث الإعلان.');
     }
 
     public function destroyImage(Listing $listing, ListingImage $image): JsonResponse
@@ -240,22 +213,14 @@ class MyListingController
     // ─── البيع ───
 
     /**
-     * زرّ واحد بمسارين حسب الحالة في قاعدة البيانات.
-     *
-     * لماذا لا مساران منفصلان: الزرّ في الواجهة واحد يتبدّل نصّه،
-     * ومساران يعنيان أن الواجهة تقرّر أيّهما تستدعي — فتُرسل «بِع» على
-     * إعلان مباع إن تأخّر تحديث الشاشة. وفي تطبيقٍ يعمل بلا شبكة أحياناً
-     * هذا التأخّر هو الحالة الغالبة لا الاستثناء.
+     * زرّ واحد بمسارين حسب الحالة في قاعدة البيانات — القرار في
+     * `ToggleListingSold`، وهنا الرسائل ورمز الرفض فقط.
      */
     public function toggleSold(Listing $listing): JsonResponse
     {
         Gate::authorize('markSold', $listing);
 
-        $wasSold = $listing->status === 'sold';
-
-        $done = $wasSold
-            ? $this->sales->unmarkSold($listing)
-            : $this->sales->markSold($listing);
+        ['wasSold' => $wasSold, 'done' => $done] = ($this->toggleSale)($listing);
 
         if (! $done) {
             return response()->json([
@@ -289,77 +254,18 @@ class MyListingController
 
     // ─── الداخل ───
 
-    /**
-     * @param  array{stored: int, failed: array<int, string>}  $result
-     */
-    private function saved(Listing $listing, array $result, string $message, int $status = 200): JsonResponse
+    private function saved(ListingSaveResult $result, string $message, int $status = 200): JsonResponse
     {
-        $listing->refresh()->load(['images', 'currency', 'category', 'location', 'user']);
+        $listing = $result->listing->refresh()->load(['images', 'currency', 'category', 'location', 'user']);
 
         return response()->json([
             'message' => $message,
             'data' => (new ListingDetailResource($listing, $this->attributes->forDisplay($listing)))
                 ->resolve(),
-            'images_stored' => $result['stored'],
+            'images_stored' => $result->imagesStored,
             // الصور الفاشلة تُبلَّغ ولا تُفشل الطلب: الإعلان نُشر، وإخفاء
             // ما سقط يجعل المعلن يظن أن صورَه الثماني كلها هناك
-            'warnings' => array_values($result['failed']),
+            'warnings' => array_values($result->failed),
         ], $status);
-    }
-
-    /**
-     * العدّادات في استعلامين لا خمسة — نفس حساب لوحة الويب.
-     *
-     * و«المنتهية» من `expires_at` لا من `status = 'expired'`: لا شيء في
-     * النظام يكتب تلك الحالة (وهو مقصود — انظر `scopeNotExpired`)،
-     * فتبويب يعتمد عليها يبقى صفراً بينما الإعلانات تنتهي فعلاً.
-     *
-     * @return array{live: int, sold: int, expired: int, trashed: int, all: int}
-     */
-    private function counts(User $user): array
-    {
-        $now = now()->toDateTimeString();
-
-        $row = Listing::query()
-            ->ownedBy($user)
-            ->selectRaw('COUNT(*) as all_count')
-            ->selectRaw(
-                "SUM(CASE WHEN status = 'active' AND (expires_at IS NULL OR expires_at >= ?) THEN 1 ELSE 0 END) as live_count",
-                [$now]
-            )
-            ->selectRaw(
-                'SUM(CASE WHEN expires_at IS NOT NULL AND expires_at < ? THEN 1 ELSE 0 END) as expired_count',
-                [$now]
-            )
-            ->selectRaw("SUM(CASE WHEN status = 'sold' THEN 1 ELSE 0 END) as sold_count")
-            ->first();
-
-        return [
-            'live' => (int) ($row->live_count ?? 0),
-            'sold' => (int) ($row->sold_count ?? 0),
-            'expired' => (int) ($row->expired_count ?? 0),
-            'trashed' => Listing::onlyTrashed()->ownedBy($user)->count(),
-            'all' => (int) ($row->all_count ?? 0),
-        ];
-    }
-
-    private function paginate(User $user, string $tab, int $perPage)
-    {
-        $query = Listing::query()
-            ->ownedBy($user)
-            ->with(['images', 'currency', 'category', 'location']);
-
-        match ($tab) {
-            'live' => $query->active()->notExpired(),
-            'sold' => $query->where('status', 'sold'),
-            'expired' => $query->expired(),
-            'trashed' => $query->onlyTrashed(),
-            default => $query,
-        };
-
-        return $query
-            ->orderByDesc($tab === 'trashed' ? 'deleted_at' : 'created_at')
-            ->paginate($perPage)
-            ->withQueryString();
     }
 }

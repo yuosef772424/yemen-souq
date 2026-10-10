@@ -13,8 +13,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Validation\ValidationException;
 
 /**
  * المحادثات الخاصة.
@@ -39,13 +37,17 @@ use Illuminate\Validation\ValidationException;
  *
  * `messages:{user}` — الرسائل الخاصة أرخص طريق للسبام في أي منصة
  * إعلانات: حساب واحد يبعث نفس النص إلى مئة معلن. والميزانية للحساب لا
- * للقناة.
+ * للقناة. والحدّ في ConversationService لا هنا: التكرار بمعرّف موجود
+ * لا يُحتسب عليه.
+ *
+ * ═══ إعادة الإرسال بـ client_id ═══
+ *
+ * الحقل اختياري. مع معرّف مكرر تعود الرسالة نفسها بـ200 بدل 201، بلا
+ * صفّ جديد ولا إشعار ثانٍ. وفي إنشاء المحادثة تُرجَع الرسالة في
+ * `sent_message` بجانب `data` حتى لا يتغير شكل الاستجابة القائم.
  */
 class ConversationController
 {
-    /** رسائل في الدقيقة لكل مستخدم — نفس حدّ الويب */
-    private const RATE_LIMIT = 12;
-
     public function __construct(
         private readonly ConversationService $conversations,
     ) {}
@@ -120,56 +122,38 @@ class ConversationController
             ], 422);
         }
 
-        $this->guardRate($user->id);
-
-        $conversation = $this->conversations->startOrContinue(
+        $sent = $this->conversations->startOrContinue(
             $user,
             $listing,
             (string) $request->validated('body'),
+            $request->clientId(),
         );
 
+        $conversation = $sent->conversation;
         $conversation->load(['listing.images', 'listing.currency', 'listing.category', 'listing.location', 'buyer', 'seller']);
 
+        // 201 للإنشاء و200 لإعادة المحاولة بالمعرّف نفسه — والرسالة
+        // نفسها بالمعرّف نفسه في الحالتين
         return response()->json([
             'message' => 'أُرسلت رسالتك.',
             'data' => new ConversationResource($conversation),
-        ], 201);
+            'sent_message' => new MessageResource($sent->message),
+        ], $sent->created ? 201 : 200);
     }
 
     public function reply(SendMessageRequest $request, Conversation $conversation): JsonResponse
     {
         Gate::authorize('reply', $conversation);
 
-        $this->guardRate($request->user()->id);
-
-        $message = $this->conversations->reply(
+        $sent = $this->conversations->reply(
             $conversation,
             $request->user(),
             (string) $request->validated('body'),
+            $request->clientId(),
         );
 
         return response()->json([
-            'data' => new MessageResource($message),
-        ], 201);
-    }
-
-    /**
-     * ValidationException لا abort(429).
-     *
-     * الحدّ الأول (`throttle:api-write`) يحمي الخادم ويردّ 429. وهذا
-     * حدٌّ على الفعل نفسه، ورسالته موجَّهة للمستخدم بالعربية — فتصل
-     * كخطأ حقلٍ يعرضه التطبيق تحت مربّع الكتابة، لا كعطل شبكة.
-     */
-    private function guardRate(int $userId): void
-    {
-        $key = "messages:{$userId}";
-
-        if (RateLimiter::tooManyAttempts($key, self::RATE_LIMIT)) {
-            throw ValidationException::withMessages([
-                'body' => 'رسائل كثيرة في وقت قصير. انتظر دقيقة ثم أعد المحاولة.',
-            ]);
-        }
-
-        RateLimiter::hit($key, 60);
+            'data' => new MessageResource($sent->message),
+        ], $sent->created ? 201 : 200);
     }
 }

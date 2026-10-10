@@ -22,7 +22,16 @@ class SendMessageRequest extends FormRequest
     {
         return [
             'body' => ['required', 'string', 'min:2', 'max:2000'],
+            // حروف وأرقام وشرطات: يسع UUID وما شابهه، ولا يسع أي شيء يُحقن
+            'client_id' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9-]+$/'],
         ];
+    }
+
+    public function clientId(): ?string
+    {
+        $value = $this->validated('client_id');
+
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     public function messages(): array
@@ -30,6 +39,8 @@ class SendMessageRequest extends FormRequest
         return [
             'body.required' => 'اكتب رسالتك.',
             'body.max' => 'الرسالة طويلة — اختصرها.',
+            'client_id.max' => 'معرّف الرسالة طويل.',
+            'client_id.regex' => 'معرّف الرسالة غير صالح.',
         ];
     }
 }

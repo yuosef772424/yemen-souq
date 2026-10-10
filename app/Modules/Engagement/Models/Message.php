@@ -16,6 +16,7 @@ class Message extends Model
         'conversation_id',
         'sender_id',
         'body',
+        'client_id',
         'created_at',
     ];
 

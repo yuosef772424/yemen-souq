@@ -8,12 +8,12 @@
     <h1 class="text-xl font-bold">وثّق رقمك بإرسال رسالة</h1>
     <p class="mt-1 text-sm text-muted">
         بدل أن ننتظر وصول رمزٍ إليك، أرسل أنت هذا الرمز إلينا من جوالك —
-        فيثبت الرقمُ نفسَه بمجرد وصول الرسالة.
+        ويتوثّق رقمك بمجرد وصول الرسالة.
     </p>
 
     @if (! $number)
         <div role="alert" class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-            لم يُضبط رقم الاستقبال بعد. راجع الإدارة.
+            هذه الخدمة غير متاحة حاليًا، حاول لاحقًا.
         </div>
     @else
         {{-- استطلاعٌ خفيف كل أربع ثوانٍ لا اتصال دائم: الحدث نادر (توثيق
@@ -57,7 +57,7 @@
             @endif
 
             <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-                <p class="font-semibold">تُحسب عليك رسالة واحدة بتعرفة مشغّلك.</p>
+                <p class="font-semibold">تُحسب عليك رسالة واحدة بتعرفة شركة الاتصالات.</p>
                 <p class="mt-1">ولا نقرأ من صندوق رسائلك شيئاً — تصلنا رسالتك أنت وحدها، كما يصل أي مرسِل.</p>
             </div>
         </div>

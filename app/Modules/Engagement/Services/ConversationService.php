@@ -10,7 +10,11 @@ use App\Modules\Engagement\Models\Conversation;
 use App\Modules\Engagement\Models\Message;
 use App\Modules\Notifications\Enums\NotificationType;
 use App\Modules\Notifications\Services\Notifier;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * فتح المحادثات وإرسال الرسائل.
@@ -39,14 +43,36 @@ use Illuminate\Support\Facades\DB;
  *    يفهرسه المخطط أصلاً: index(buyer_id, last_message_at).
  *
  * 5. الإشعار لا يحمل نصّ الرسالة — انظر notify أدناه.
+ *
+ * 6. إعادة الإرسال آمنة بمعرّف من العميل (client_id).
+ *    انقطاع الشبكة بعد وصول الطلب، تحديث الصفحة بعد الإرسال، ضغطة
+ *    مزدوجة — كلها تُرسل الطلب نفسه مرتين. فالعميل يولّد معرّفاً لكل
+ *    رسالة ويعيد استخدامه عند المحاولة، والمخزن يفرض الفريد على
+ *    (محادثة، مرسل، معرّف). ثلاث نتائج لذلك:
+ *      - الرسالة الموجودة تُعاد كما هي: لا صفّ ثانٍ ولا إشعار ثانٍ.
+ *      - التكرار لا يُحتسب على حدّ المعدل، ولا يُرفض لو بلغ المرسل الحدّ:
+ *        هو ليس رسالة جديدة، ورفضه يخبر العميل أن رسالته لم تصل وقد وصلت.
+ *      - الحدّ يُحجز قبل الإنشاء لا بعده: tooManyAttempts ثم hit فوراً،
+ *        قبل المعاملة. لو سُجّل الـhit بعد المعاملة لمرّ كل طلب متوازٍ
+ *        من الفحص قبل أن يسجّل أيٌّ منها شيئاً. والحجز يُردّ (decrement)
+ *        لو انتهت المحاولة بلا رسالة جديدة: تكرار سبقه طلب آخر، أو
+ *        استثناء — فمحاولة فاشلة أو مكرّرة لا تستهلك الحدّ. والبحث عن
+ *        المعرّف يسبق الحجز كله، فالتكرار لا يلمس العدّاد أصلاً.
+ *    المرجع: deduplicateCreatePost في Mattermost (PendingPostId)،
+ *    ومفتاح Idempotency-Key في Stripe. وبلا معرّف (عميل قديم) يبقى
+ *    السلوك السابق كما هو.
  */
 final class ConversationService
 {
+    /** رسائل في الدقيقة لكل مستخدم — للويب والـAPI معاً */
+    public const RATE_LIMIT = 12;
+
+    public const RATE_WINDOW = 60;
+
     public function __construct(
         private readonly EventRecorder $events,
         private readonly Notifier $notifier,
-    ) {
-    }
+    ) {}
 
     /**
      * هل يجوز لهذا المستخدم فتح محادثة على هذا الإعلان؟
@@ -71,23 +97,45 @@ final class ConversationService
      * إرسال أول رسالة أو متابعة الخيط القائم.
      *
      * firstOrCreate لا create — انظر تعليق Conversation.
+     *
+     * الترتيب مقصود: بحثٌ عن المعرّف، حجزُ الحدّ (فحصٌ ثم hit)، ثم الإنشاء.
+     * البحث قبل المعاملة لا داخلها: المسابِق الذي يفوز يكتب في معاملته
+     * هو، والخاسر يلتقط مخالفة الفريد ويقرأ الصفّ الفائز بعد تراجع
+     * معاملته.
      */
-    public function startOrContinue(User $buyer, Listing $listing, string $body): Conversation
+    public function startOrContinue(User $buyer, Listing $listing, string $body, ?string $clientId = null): SentMessage
     {
-        $conversation = DB::transaction(function () use ($buyer, $listing, $body): array {
-            $conversation = Conversation::firstOrCreate(
-                ['listing_id' => $listing->id, 'buyer_id' => $buyer->id],
-                ['seller_id' => $listing->user_id, 'created_at' => now()]
-            );
+        $existing = $this->findDuplicateForListing($buyer, $listing, $clientId);
 
-            $isFirst = $conversation->wasRecentlyCreated;
+        if ($existing !== null) {
+            return $existing;
+        }
 
-            $this->append($conversation, $buyer, $body);
+        $this->reserveRate($buyer);
 
-            return [$conversation, $isFirst];
-        });
+        try {
+            [$conversation, $message, $isFirst] = DB::transaction(function () use ($buyer, $listing, $body, $clientId): array {
+                $conversation = Conversation::firstOrCreate(
+                    ['listing_id' => $listing->id, 'buyer_id' => $buyer->id],
+                    ['seller_id' => $listing->user_id, 'created_at' => now()]
+                );
 
-        [$conversation, $isFirst] = $conversation;
+                $isFirst = $conversation->wasRecentlyCreated;
+
+                $message = $this->append($conversation, $buyer, $body, $clientId);
+
+                return [$conversation, $message, $isFirst];
+            });
+        } catch (UniqueConstraintViolationException $e) {
+            // طلبان بالمعرّف نفسه مرّا معاً من البحث — الآخر سبق، والتكرار لا يُحتسب
+            $this->releaseRate($buyer);
+
+            return $this->findDuplicateForListing($buyer, $listing, $clientId) ?? throw $e;
+        } catch (Throwable $e) {
+            $this->releaseRate($buyer);
+
+            throw $e;
+        }
 
         if ($isFirst) {
             $this->events->record(EventName::ContactRevealed, 'listing', $listing->id, [
@@ -100,13 +148,34 @@ final class ConversationService
             Listing::withTrashed()->whereKey($listing->getKey())->increment('contacts_count');
         }
 
-        return $conversation;
+        return new SentMessage($conversation, $message, true);
     }
 
     /** رسالة في خيط قائم — من أي من الطرفين */
-    public function reply(Conversation $conversation, User $sender, string $body): Message
+    public function reply(Conversation $conversation, User $sender, string $body, ?string $clientId = null): SentMessage
     {
-        return DB::transaction(fn (): Message => $this->append($conversation, $sender, $body));
+        $existing = $this->findDuplicate($conversation, $sender, $clientId);
+
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $this->reserveRate($sender);
+
+        try {
+            $message = DB::transaction(fn (): Message => $this->append($conversation, $sender, $body, $clientId));
+        } catch (UniqueConstraintViolationException $e) {
+            // الآخر سبق، والتكرار لا يُحتسب
+            $this->releaseRate($sender);
+
+            return $this->findDuplicate($conversation, $sender, $clientId) ?? throw $e;
+        } catch (Throwable $e) {
+            $this->releaseRate($sender);
+
+            throw $e;
+        }
+
+        return new SentMessage($conversation, $message, true);
     }
 
     /**
@@ -124,12 +193,110 @@ final class ConversationService
             ->update(['read_at' => now()]);
     }
 
-    private function append(Conversation $conversation, User $sender, string $body): Message
+    /** الرسالة التي أُرسلت بهذا المعرّف من هذا المرسل في هذا الخيط، إن وُجدت */
+    private function findDuplicate(Conversation $conversation, User $sender, ?string $clientId): ?SentMessage
+    {
+        if ($clientId === null || $clientId === '') {
+            return null;
+        }
+
+        $message = Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('sender_id', $sender->id)
+            ->where('client_id', $clientId)
+            ->first();
+
+        return $message === null ? null : new SentMessage($conversation, $message, false);
+    }
+
+    private function findDuplicateForListing(User $buyer, Listing $listing, ?string $clientId): ?SentMessage
+    {
+        if ($clientId === null || $clientId === '') {
+            return null;
+        }
+
+        $conversation = Conversation::query()
+            ->where('listing_id', $listing->id)
+            ->where('buyer_id', $buyer->id)
+            ->first();
+
+        return $conversation === null ? null : $this->findDuplicate($conversation, $buyer, $clientId);
+    }
+
+    /**
+     * حدّ زمني على الإرسال.
+     *
+     * الرسائل الخاصة أرخص طريق للسبام في أي منصة إعلانات: حساب واحد يبعث
+     * نفس النص إلى مئة معلن. الحدّ لا يمنع الاستخدام الطبيعي — اثنتا عشرة
+     * رسالة في الدقيقة أسرع من أي محادثة حقيقية.
+     *
+     * ValidationException لا abort(429): الرسالة تعود إلى نفس النموذج
+     * ويقرأها المستخدم بالعربية، بدل صفحة خطأ لا تقول ما يفعل.
+     *
+     * والمفتاح واحد للويب والـAPI: الميزانية للحساب لا للقناة.
+     */
+    private function guardRate(User $sender): void
+    {
+        if (RateLimiter::tooManyAttempts(self::rateKey($sender), self::RATE_LIMIT)) {
+            throw self::rateLimited();
+        }
+    }
+
+    /**
+     * فحص الحدّ ثم حجز مكان فيه قبل أي كتابة.
+     *
+     * الفحص وحده لا يكفي: بين tooManyAttempts وhit تمرّ طلبات متوازية كلها.
+     * فبعد الحجز نقرأ العدّاد الذي أعاده hit نفسه (زيادة ذرّية في المخزن) —
+     * من تجاوز بهذا الحجز الحدّ يردّه ويُرفض، فلا يعبر الحدّ أكثر من
+     * RATE_LIMIT طلباً حتى لو اجتاز الجميع الفحص معاً.
+     */
+    private function reserveRate(User $sender): void
+    {
+        $this->guardRate($sender);
+
+        $attempts = RateLimiter::hit(self::rateKey($sender), self::RATE_WINDOW);
+
+        if ($attempts > self::RATE_LIMIT) {
+            $this->releaseRate($sender);
+
+            throw self::rateLimited();
+        }
+    }
+
+    /**
+     * ردّ حجز لم تنتج عنه رسالة جديدة.
+     *
+     * لو انقضت النافذة بين الحجز والردّ يبدأ العدّاد من الصفر فيصير سالباً،
+     * والسالب ميزانية إضافية مجانية — فيُصفَّر.
+     */
+    private function releaseRate(User $sender): void
+    {
+        $key = self::rateKey($sender);
+
+        if (RateLimiter::decrement($key, self::RATE_WINDOW) < 0) {
+            RateLimiter::resetAttempts($key);
+        }
+    }
+
+    private static function rateLimited(): ValidationException
+    {
+        return ValidationException::withMessages([
+            'body' => 'رسائل كثيرة في وقت قصير. انتظر دقيقة ثم أعد المحاولة.',
+        ]);
+    }
+
+    private static function rateKey(User $sender): string
+    {
+        return "messages:{$sender->id}";
+    }
+
+    private function append(Conversation $conversation, User $sender, string $body, ?string $clientId = null): Message
     {
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'sender_id' => $sender->id,
             'body' => $body,
+            'client_id' => $clientId === '' ? null : $clientId,
             'created_at' => now(),
         ]);
 

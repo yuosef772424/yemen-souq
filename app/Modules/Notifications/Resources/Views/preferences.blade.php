@@ -66,9 +66,11 @@
             </table>
         </div>
 
-        <p class="mt-4 text-xs text-muted">
-            الرسالة النصية قد تصل متأخرة بضع ثوانٍ — تنتظر هاتفاً يسحبها من الطابور.
-        </p>
+        @if (collect($channels)->contains(fn ($channel) => $channel->value === 'sms'))
+            <p class="mt-4 text-xs text-muted">
+                قد تصل الرسالة النصية متأخرة بضع ثوانٍ.
+            </p>
+        @endif
 
         <button type="submit"
                 class="mt-4 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-dark">

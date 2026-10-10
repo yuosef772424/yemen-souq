@@ -56,7 +56,7 @@ final class PreferenceResolver
      */
     public function save(User $user, NotificationType $type, array $channels): void
     {
-        $row = NotificationPreference::defaultsFor($user, $type);
+        $row = $this->baseRow($user, $type);
 
         foreach ($channels as $name => $enabled) {
             if (array_key_exists($name, $row) && $name !== 'user_id' && $name !== 'notification_type') {
@@ -71,6 +71,31 @@ final class PreferenceResolver
         );
 
         unset($this->cache[$this->key($user, $type)]);
+    }
+
+    /**
+     * نقطة بدء الحفظ: ما هو محفوظ فعلاً، وإلا الافتراضات.
+     *
+     * القنوات المخفية (الرسالة النصية حين تُطفأ وحدة Sms) لا تصل في
+     * الطلب، فلو بدأ الحفظ من الافتراضات لمُسح اختيار المستخدم القديم
+     * بصمت عند أول حفظ. البدء من الصفّ المحفوظ يُبقي القيمة كما هي.
+     *
+     * @return array<string, mixed>
+     */
+    private function baseRow(User $user, NotificationType $type): array
+    {
+        $row = NotificationPreference::defaultsFor($user, $type);
+        $saved = $this->preference($user, $type);
+
+        if ($saved === null) {
+            return $row;
+        }
+
+        foreach (Channel::cases() as $channel) {
+            $row[$channel->value] = $saved->allows($channel);
+        }
+
+        return $row;
     }
 
     /** كل التفضيلات الفعّالة لمستخدم — الافتراض حيث لا صفّ */

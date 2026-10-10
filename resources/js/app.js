@@ -151,6 +151,108 @@ Alpine.data('contactReveal', (listingId) => ({
 }));
 
 /**
+ * نموذج الرسالة الخاصة (صفحة الإعلان وصفحة المحادثة).
+ *
+ * الإرسال يبقى POST عادياً يعمل بلا JavaScript — والحماية من التكرار
+ * في الخادم: الحقل المخفي client_id يُولَّد عند عرض النموذج، فالتحديث
+ * بعد الإرسال لا يُنشئ رسالة ثانية. وهذا المكوّن طبقة تحسين فوق ذلك:
+ *
+ * - `sending` يعطّل الزرّ ويمنع ضغطةً ثانية قبل أن تنتقل الصفحة.
+ * - المعرّف يُولَّد مرة واحدة لكل رسالة، ويبقى هو نفسه عند إعادة المحاولة
+ *   (فشل شبكة، رفض تحقق): لا يتبدّل إلا حين تُحمَّل صفحة جديدة بنموذج جديد.
+ *   لو خلا الحقل لأي سبب يُولَّد هنا — وبديل لـcrypto.randomUUID لأنه
+ *   لا يوجد خارج السياق الآمن (http).
+ * - الاستعادة من ذاكرة المتصفح بالزرّ الخلفي تُعيد الصفحة والزرّ معطَّل،
+ *   فنفكّه في pageshow. والمستمع والمؤقّت يُسجَّلان مرة واحدة ويُزالان
+ *   في destroy.
+ */
+const MESSAGE_SEND_TIMEOUT_MS = 15000;
+
+function newClientId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+
+    const bytes = new Uint8Array(16);
+
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        crypto.getRandomValues(bytes);
+    } else {
+        for (let i = 0; i < bytes.length; i++) {
+            bytes[i] = Math.floor(Math.random() * 256);
+        }
+    }
+
+    // RFC 4122 v4
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+Alpine.data('messageForm', () => ({
+    sending: false,
+    timer: null,
+    onPageShow: null,
+
+    init() {
+        // مرة واحدة هنا — لا في submit، وإلا تراكمت المستمعات
+        this.onPageShow = (event) => {
+            if (event.persisted) {
+                // الصفحة عادت من bfcache والحقل يحمل معرّف رسالة أُرسلت: بلا
+                // معرّف جديد تُعدّ الرسالة التالية تكراراً وتُسقط بصمت
+                if (this.$refs.clientId) {
+                    this.$refs.clientId.value = newClientId();
+                }
+
+                this.reset();
+            }
+        };
+
+        window.addEventListener('pageshow', this.onPageShow);
+
+        const field = this.$refs.clientId;
+
+        if (field && !field.value) {
+            field.value = newClientId();
+        }
+    },
+
+    destroy() {
+        window.removeEventListener('pageshow', this.onPageShow);
+        this.clearTimer();
+    },
+
+    submit(event) {
+        if (this.sending) {
+            event.preventDefault();
+            return;
+        }
+
+        this.sending = true;
+
+        // الشبكة التي تنقطع تُبقي الصفحة حيث هي: بعد مهلة يُعاد تفعيل الزرّ،
+        // والمحاولة التالية تحمل المعرّف نفسه فلا تُنشئ رسالتين
+        this.clearTimer();
+        this.timer = setTimeout(() => this.reset(), MESSAGE_SEND_TIMEOUT_MS);
+    },
+
+    reset() {
+        this.sending = false;
+        this.clearTimer();
+    },
+
+    clearTimer() {
+        if (this.timer !== null) {
+            clearTimeout(this.timer);
+            this.timer = null;
+        }
+    },
+}));
+
+/**
  * «شوهدت مؤخراً»: تعمل بالكامل من طرف العميل عبر localStorage — بلا
  * حساب وبلا استعلام خادم. الشكل المخزَّن (id/title/price/image/url) هو
  * نفسه عقد الربط المستقبلي بحساب المستخدم إن احتاج المنتج ذلك لاحقاً.

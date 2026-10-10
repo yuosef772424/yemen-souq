@@ -11,6 +11,7 @@ use App\Modules\Notifications\Services\PreferenceResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\Support\SeedsCatalog;
 use Tests\TestCase;
@@ -168,9 +169,79 @@ class ApiAccountTest extends TestCase
             ->assertJsonPath('data.0.type', NotificationType::NewMessage->value)
             ->assertJsonPath('data.0.label', NotificationType::NewMessage->label())
             ->assertJsonPath('data.0.channels.push', true)
-            // الأربع منفَّذة اليوم — sms وemail مطفأتان افتراضياً لا غائبتان
+            // مفتاح sms باقٍ كما كان حتى والوحدة مطفأة (SMS_ENABLED=false
+            // في phpunit.xml) — التوفّر في channels[].available
             ->assertJsonPath('data.0.channels.sms', false)
             ->assertJsonPath('data.0.channels.email', false);
+    }
+
+    /**
+     * شكل الاستجابة القديم لم يتغيّر: نفس المفاتيح ونفس الأنواع، والجديد
+     * إضافةٌ وحدها (`channels[].available`). عميل جوال قديم لا يفقد مفتاحاً.
+     */
+    #[Test]
+    #[DataProvider('smsSwitch')]
+    public function the_preferences_response_keeps_its_old_shape(bool $smsEnabled): void
+    {
+        config(['sms.enabled' => $smsEnabled]);
+
+        $json = $this->getJson(route('api.v1.me.notification-preferences'), $this->auth())
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['data', 'channels'], array_keys($json));
+
+        foreach ($json['data'] as $row) {
+            $this->assertSame(['type', 'label', 'mandatory', 'channels'], array_keys($row));
+            $this->assertIsString($row['type']);
+            $this->assertIsString($row['label']);
+            $this->assertIsBool($row['mandatory']);
+            $this->assertSame(['in_app', 'push', 'sms', 'email'], array_keys($row['channels']));
+
+            foreach ($row['channels'] as $value) {
+                $this->assertIsBool($value);
+            }
+        }
+
+        $this->assertSame(
+            ['in_app', 'push', 'sms', 'email'],
+            array_column($json['channels'], 'value')
+        );
+
+        foreach ($json['channels'] as $channel) {
+            // المفتاحان القديمان بنوعيهما، والجديد بعدهما
+            $this->assertSame(['value', 'label', 'available'], array_keys($channel));
+            $this->assertIsString($channel['value']);
+            $this->assertIsString($channel['label']);
+            $this->assertIsBool($channel['available']);
+        }
+
+        $available = array_column($json['channels'], 'available', 'value');
+
+        $this->assertSame($smsEnabled, $available['sms']);
+        $this->assertTrue($available['in_app'] && $available['push'] && $available['email']);
+    }
+
+    public static function smsSwitch(): array
+    {
+        return ['sms off' => [false], 'sms on' => [true]];
+    }
+
+    /** والحفظ بلا مفتاح sms (عميل رأى القناة غير متوفرة) لا يمسح اختياراً محفوظاً */
+    #[Test]
+    public function saving_without_the_sms_key_keeps_a_saved_sms_choice(): void
+    {
+        config(['sms.enabled' => true]);
+        app(PreferenceResolver::class)->save($this->user, NotificationType::NewMessage, ['sms' => true]);
+        config(['sms.enabled' => false]);
+
+        $this->putJson(route('api.v1.me.notification-preferences'), [
+            'preferences' => [
+                NotificationType::NewMessage->value => ['in_app' => true, 'push' => true],
+            ],
+        ], $this->auth())
+            ->assertOk()
+            ->assertJsonPath('data.0.channels.sms', true);
     }
 
     #[Test]

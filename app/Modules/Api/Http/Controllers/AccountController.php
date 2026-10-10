@@ -203,7 +203,9 @@ class AccountController
         foreach (NotificationType::cases() as $type) {
             $channels = [];
 
-            foreach ($this->implementedChannels() as $channel) {
+            // كل القنوات دائماً: مفتاح sms لا يغيب عن العملاء القدامى حين
+            // تُطفأ الوحدة. التوفّر في `channels[].available` أدناه.
+            foreach (Channel::cases() as $channel) {
                 $channels[$channel->value] = $current[$type->value][$channel->value];
             }
 
@@ -221,8 +223,9 @@ class AccountController
                 static fn (Channel $channel): array => [
                     'value' => $channel->value,
                     'label' => $channel->label(),
+                    'available' => $channel->isImplemented(),
                 ],
-                array_values($this->implementedChannels()),
+                Channel::cases(),
             ),
         ]);
     }
@@ -247,7 +250,13 @@ class AccountController
         foreach (NotificationType::cases() as $type) {
             $channels = [];
 
-            foreach ($this->implementedChannels() as $channel) {
+            foreach (Channel::cases() as $channel) {
+                // القناة غير المتوفرة لا تُطفأ بغيابها: يُحفظ ما أُرسل لها
+                // فقط، وإلا بقي المحفوظ كما هو (PreferenceResolver::save)
+                if (! $channel->isImplemented() && ! isset($submitted[$type->value][$channel->value])) {
+                    continue;
+                }
+
                 $channels[$channel->value] = $type->isMandatory() && $channel === Channel::InApp
                     ? true
                     : filter_var(
@@ -331,14 +340,5 @@ class AccountController
         });
 
         return response()->json(['message' => 'أُغلق حسابك.']);
-    }
-
-    /** @return list<Channel> */
-    private function implementedChannels(): array
-    {
-        return array_values(array_filter(
-            Channel::cases(),
-            static fn (Channel $channel): bool => $channel->isImplemented(),
-        ));
     }
 }

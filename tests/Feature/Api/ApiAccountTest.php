@@ -168,8 +168,9 @@ class ApiAccountTest extends TestCase
             ->assertJsonPath('data.0.type', NotificationType::NewMessage->value)
             ->assertJsonPath('data.0.label', NotificationType::NewMessage->label())
             ->assertJsonPath('data.0.channels.push', true)
-            // الأربع منفَّذة اليوم — sms وemail مطفأتان افتراضياً لا غائبتان
-            ->assertJsonPath('data.0.channels.sms', false)
+            // البريد مطفأ افتراضياً لا غائب. والرسالة النصية غائبة كلياً
+            // ما دامت وحدة Sms مطفأة (SMS_ENABLED=false في phpunit.xml)
+            ->assertJsonMissingPath('data.0.channels.sms')
             ->assertJsonPath('data.0.channels.email', false);
     }
 

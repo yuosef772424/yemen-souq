@@ -6,6 +6,7 @@ use App\Modules\Sms\Services\ChallengeVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -58,9 +59,19 @@ class ChallengeController
             return redirect()->route('phone.verify')->with('error', $exception->getMessage());
         }
 
+        $number = $this->challenges->inboundNumber();
+
+        // التفصيل التقني للسجلّ لا للشاشة: العميل يرى رسالة عامة،
+        // والمشغّل يجد هنا ما يلزمه ليصلح الإعداد
+        if ($number === null) {
+            Log::warning('SMS reverse verification page requested but sms.inbound.number (SMS_INBOUND_NUMBER) is not configured.', [
+                'user_id' => $user->id,
+            ]);
+        }
+
         return view('sms::challenge', [
             'display' => $this->challenges->display($challenge['token']),
-            'number' => $this->challenges->inboundNumber(),
+            'number' => $number,
             'minutes' => $this->challenges->ttlMinutes(),
             // رابط يفتح تطبيق الرسائل بالرقم والنصّ جاهزين — يوفّر
             // النسخَ اليدوي، وهو أكثر ما يُخطئ فيه من يكتب بالإبهام

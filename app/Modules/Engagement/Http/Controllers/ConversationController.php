@@ -9,19 +9,13 @@ use App\Modules\Engagement\Services\ConversationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class ConversationController
 {
-    /** رسائل في الدقيقة لكل مستخدم */
-    private const RATE_LIMIT = 12;
-
     public function __construct(
         private readonly ConversationService $conversations,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): View
     {
@@ -74,16 +68,16 @@ class ConversationController
             return back()->with('error', 'لا يمكن بدء محادثة على هذا الإعلان.');
         }
 
-        $this->guardRate($user->id);
-
-        $conversation = $this->conversations->startOrContinue(
+        // حدّ المعدل داخل الخدمة: التكرار بمعرّف موجود لا يُحتسب عليه
+        $sent = $this->conversations->startOrContinue(
             $user,
             $listing,
-            $request->string('body')->value()
+            $request->string('body')->value(),
+            $request->clientId(),
         );
 
         return redirect()
-            ->route('account.messages.show', $conversation)
+            ->route('account.messages.show', $sent->conversation)
             ->with('status', 'أُرسلت رسالتك.');
     }
 
@@ -91,37 +85,13 @@ class ConversationController
     {
         Gate::authorize('reply', $conversation);
 
-        $this->guardRate($request->user()->id);
-
         $this->conversations->reply(
             $conversation,
             $request->user(),
-            $request->string('body')->value()
+            $request->string('body')->value(),
+            $request->clientId(),
         );
 
         return redirect()->route('account.messages.show', $conversation);
-    }
-
-    /**
-     * حدّ زمني على الإرسال.
-     *
-     * الرسائل الخاصة أرخص طريق للسبام في أي منصة إعلانات: حساب واحد يبعث
-     * نفس النص إلى مئة معلن. الحدّ لا يمنع الاستخدام الطبيعي — اثنتا عشرة
-     * رسالة في الدقيقة أسرع من أي محادثة حقيقية.
-     *
-     * ValidationException لا abort(429): الرسالة تعود إلى نفس النموذج
-     * ويقرأها المستخدم بالعربية، بدل صفحة خطأ لا تقول ما يفعل.
-     */
-    private function guardRate(int $userId): void
-    {
-        $key = "messages:{$userId}";
-
-        if (RateLimiter::tooManyAttempts($key, self::RATE_LIMIT)) {
-            throw ValidationException::withMessages([
-                'body' => 'رسائل كثيرة في وقت قصير. انتظر دقيقة ثم أعد المحاولة.',
-            ]);
-        }
-
-        RateLimiter::hit($key, 60);
     }
 }

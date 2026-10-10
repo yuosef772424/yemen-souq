@@ -10,9 +10,11 @@ namespace App\Modules\Notifications\Enums;
  * فاسم القناة هو اسم العمود. البديل — خريطة تحويل — يعني موضعاً ثانياً
  * يجب أن يُعدَّل عند إضافة قناة، ونسيانه يُسقط القناة الجديدة بصمت.
  *
- * والأربع كلها منفَّذة اليوم — انظر Notifier::sms وNotifier::email. وكلا
- * القناتين الجديدتين افتراضيها false في كل نوع رغم ذلك: انظر
- * NotificationType::defaultFor لسبب الإطفاء الذي لا علاقة له بالتنفيذ.
+ * الأربع منفَّذة في الشيفرة — انظر Notifier::sms وNotifier::email — لكن
+ * الرسالة النصية لا تُعدّ مفعَّلة إلا حين تُشغَّل وحدة Sms (انظر
+ * isImplemented). وكلا القناتين الجديدتين افتراضيها false في كل نوع
+ * رغم ذلك: انظر NotificationType::defaultFor لسبب الإطفاء الذي لا علاقة
+ * له بالتنفيذ.
  */
 enum Channel: string
 {
@@ -31,10 +33,25 @@ enum Channel: string
         };
     }
 
-    /** القنوات التي لها تنفيذ فعلي اليوم */
+    /**
+     * هل القناة مفعَّلة فعلاً الآن؟
+     *
+     * الرسالة النصية تتبع مفتاح وحدة Sms (`sms.enabled`، من SMS_ENABLED
+     * ومطفأ افتراضياً): بلا تفعيلها لا رابط لـSmsSender في الحاوية، فلا
+     * يصل أحداً شيء. ولذلك يُخفى عمودها من شاشات التفضيلات، ولا يسمح
+     * PreferenceResolver::allows بها، فلا يُجدول إرسالها أصلاً. وبقية
+     * القنوات كما كانت.
+     *
+     * الإخفاء عرضٌ لا حذف: القيمة المحفوظة في notification_preferences
+     * تبقى كما هي (انظر PreferenceResolver::save)، فإذا فُعِّلت الوحدة
+     * لاحقاً عاد اختيار المستخدم القديم.
+     */
     public function isImplemented(): bool
     {
-        return true;
+        return match ($this) {
+            self::Sms => (bool) config('sms.enabled', false),
+            default => true,
+        };
     }
 
     /**

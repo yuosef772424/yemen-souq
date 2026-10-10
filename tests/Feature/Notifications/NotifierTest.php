@@ -225,6 +225,8 @@ class NotifierTest extends TestCase
     #[Test]
     public function an_implemented_channel_is_allowed_when_the_preference_allows_it(): void
     {
+        config(['sms.enabled' => true]);
+
         app(PreferenceResolver::class)->save(
             $this->recipient,
             NotificationType::NewMessage,

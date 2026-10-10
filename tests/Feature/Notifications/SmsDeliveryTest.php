@@ -43,6 +43,9 @@ class SmsDeliveryTest extends TestCase
 
     private function allowSms(): void
     {
+        // قناة SMS لا تُعدّ مفعَّلة إلا حين تُشغَّل وحدة Sms (Channel::isImplemented)
+        config(['sms.enabled' => true]);
+
         app(PreferenceResolver::class)->save($this->user, NotificationType::NewMessage, ['sms' => true]);
     }
 

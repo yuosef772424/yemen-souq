@@ -57,8 +57,13 @@
         @endforeach
     </ul>
 
-    <form method="POST" action="{{ route('account.messages.reply', $conversation) }}" class="mt-5">
+    <form method="POST" action="{{ route('account.messages.reply', $conversation) }}" class="mt-5"
+          x-data="messageForm" @submit="submit($event)">
         @csrf
+        {{-- معرّف الرسالة يُولَّد عند عرض النموذج: تحديث الصفحة بعد الإرسال أو
+             الضغط المزدوج يرسلان المعرّف نفسه فلا تُنشأ رسالة ثانية. وold()
+             يحفظه عند فشل التحقق ليعاد استخدامه في المحاولة التالية --}}
+        <input type="hidden" name="client_id" x-ref="clientId" value="{{ old('client_id', \Illuminate\Support\Str::uuid()->toString()) }}">
         <label class="sr-only" for="reply-body">رسالتك</label>
         <textarea id="reply-body" name="body" rows="3" maxlength="2000" required
                   placeholder="اكتب رسالتك…"
@@ -68,8 +73,12 @@
             <p class="mt-1 text-xs text-red-700">{{ $message }}</p>
         @enderror
 
-        <button type="submit"
-                class="mt-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-dark">
+        @error('client_id')
+            <p class="mt-1 text-xs text-red-700">{{ $message }}</p>
+        @enderror
+
+        <button type="submit" :disabled="sending"
+                class="mt-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60">
             إرسال
         </button>
     </form>

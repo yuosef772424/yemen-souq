@@ -66,12 +66,14 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request, Throwable $e): bool => $request->is('api/*') || $request->expectsJson()
         );
 
-        // خدمة تُلقي ApiProblemException قد تُستدعى من الويب أيضاً
-        $exceptions->map(
-            ApiProblemException::class,
-            fn (ApiProblemException $e): Throwable => ProblemDetails::handles(request())
-                ? $e
-                : ProblemDetails::forWeb($e)
+        /**
+         * خدمة تُلقي ApiProblemException قد تُستدعى من الويب أيضاً.
+         *
+         * التحويل هنا وقت العرض لا بـ`map()`: انظر ProblemDetails::renderForWeb.
+         * مسجَّل بعد callback الأعلى فيسبقه الـAPI، ويعيد null لمسار ‎/api‎.
+         */
+        $exceptions->render(
+            fn (ApiProblemException $e, Request $request) => ProblemDetails::renderForWeb($e, $request)
         );
 
         // خطأ العميل المقصود (4xx) ليس عطلاً يستحق سطراً في السجلّ

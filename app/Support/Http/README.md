@@ -1,6 +1,12 @@
 # عقد أخطاء `/api/*` (RFC 9457)
 
-كل خطأ من مسار يبدأ بـ`/api/` يخرج بـ`Content-Type: application/problem+json` وهذا الجسد:
+كل **استثناء** يُلقى من مسار يبدأ بـ`/api/` يخرج بـ`Content-Type: application/problem+json` وهذا الجسد:
+
+> **تنبيه — حدود المعدّل المسمّاة لا تُرجع problem+json بعد.** `api-read` و`api-write` و`api-auth`
+> و`sms-worker` تعرّف `->response(...)` مخصّصاً يبني JSON عادياً (`{"message": "…"}` بحالة 429)
+> بدل استثناء، فلا يمرّ بهذا المعالج. أي `throttle` عارٍ بلا استجابة مخصّصة هو وحده الذي يتحوّل إلى
+> `rate_limited`. تحويلها عمل لاحق، وتفصيله في «ما لا يغطّيه المعالج بعد» من
+> `docs/reference/api-errors.md`.
 
 | الحقل | المعنى |
 |---|---|

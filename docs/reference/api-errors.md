@@ -3,13 +3,17 @@
 > **محروس بـ** `tests/Feature/Shared/ApiProblemDetailsTest` و`tests/Unit/Shared/ProblemCodeTest`.
 > المرجع: [RFC 9457 — Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457).
 
-كل خطأ يخرج من مسار يبدأ بـ`/api/` له **شكل واحد ونوع محتوى واحد**:
+كل **استثناء** يخرج من مسار يبدأ بـ`/api/` له **شكل واحد ونوع محتوى واحد**:
 
 ```
 Content-Type: application/problem+json
 ```
 
 صفحات الويب لا تتأثر: تبقى بصفحات الأخطاء وإعادة التوجيه مع أخطاء الجلسة.
+
+> **تنبيه:** الاستجابات الجاهزة لا تمرّ بالمعالج، ومنها ردّ حدود المعدّل المسمّاة (`api-read`
+> و`api-write` و`api-auth` و`sms-worker`): فهي تُرجع JSON عادياً لا `problem+json`.
+> انظر [ما لا يغطّيه المعالج بعد](#ما-لا-يغطّيه-المعالج-بعد).
 
 الفحص بالمسار (`/api/*`) لا بترويسة `Accept`. خطأ 404 على مسار `/api` غير موجود لا يمرّ
 بوسيط `ForceJsonResponse` لأنه لا مسار مطابق فلا وسطاء، فالاعتماد على الترويسة يعيد HTML في
@@ -54,7 +58,7 @@ Content-Type: application/problem+json
 | `unauthenticated` | 401 | لا رمز، أو رمز منتهٍ/مسحوب. |
 | `forbidden` | 403 | مصادَق لكن لا صلاحية. |
 | `not_found` | 404 | المورد غير موجود (ومنه ربط النموذج بالمسار). |
-| `rate_limited` | 429 | تجاوز حدّ المعدّل. مع `Retry-After` و`retry_after`. |
+| `rate_limited` | 429 | تجاوز حدّ المعدّل من وسيط `throttle` عارٍ بلا `->response(...)` مخصّص. مع `Retry-After` و`retry_after`. **لا تُرجعه حدود التطبيق المسمّاة** (`api-read`، `api-write`، `api-auth`، `sms-worker`): ردّها JSON عادي `{"message": "…"}` — انظر [ما لا يغطّيه المعالج بعد](#ما-لا-يغطّيه-المعالج-بعد). |
 | `server_error` | 500 | أي خطأ غير متوقع، ورسالته عامة دائماً. |
 
 ### الدخول والتسجيل والتوثيق

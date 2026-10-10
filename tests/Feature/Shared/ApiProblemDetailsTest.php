@@ -20,6 +20,7 @@ use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
 use Tests\TestCase;
+use Throwable;
 
 /**
  * معالج أخطاء ‎/api/*‎ بصيغة RFC 9457.
@@ -235,7 +236,7 @@ class ApiProblemDetailsTest extends TestCase
     }
 
     #[Test]
-    public function the_real_throttle_middleware_is_converted_too(): void
+    public function a_bare_throttle_middleware_on_a_test_route_is_converted(): void
     {
         $uri = $this->api('GET', '_probe/limited', fn () => ['ok' => true], ['throttle:1,1']);
 
@@ -493,15 +494,72 @@ class ApiProblemDetailsTest extends TestCase
 
     // ─── التقارير ───
 
+    /**
+     * يمرّ الاستثناء بمسار التبليغ الحقيقي (mapException ثم shouldntReport
+     * ثم callbacks) ويعيد ما بلغ callback التجسّس.
+     *
+     * @return list<Throwable>
+     */
+    private function reportedBy(callable $report): array
+    {
+        $reported = [];
+
+        app(ExceptionHandler::class)->reportable(function (Throwable $e) use (&$reported): bool {
+            $reported[] = $e;
+
+            return false; // لا تكتب في السجلّ
+        });
+
+        $report();
+
+        return $reported;
+    }
+
     #[Test]
     public function client_side_domain_errors_are_not_reported_but_server_ones_are(): void
     {
         $handler = app(ExceptionHandler::class);
 
-        $this->assertFalse($handler->shouldReport(ApiException::phoneTaken()));
-        $this->assertFalse($handler->shouldReport(ApiException::tooManyAttempts(10)));
-        $this->assertTrue($handler->shouldReport(new ApiProblemException(ProblemCode::ServerError, 500, 'x')));
-        $this->assertTrue($handler->shouldReport(new RuntimeException('boom')));
+        $client = ApiException::phoneTaken();
+        $throttled = ApiException::tooManyAttempts(10);
+        $server = new ApiProblemException(ProblemCode::ServerError, 500, 'x');
+        $plain = new RuntimeException('boom');
+
+        $reported = $this->reportedBy(function () use ($handler, $client, $throttled, $server, $plain): void {
+            $handler->report($client);
+            $handler->report($throttled);
+            $handler->report($server);
+            $handler->report($plain);
+        });
+
+        $this->assertSame([$server, $plain], $reported);
+    }
+
+    #[Test]
+    public function a_503_problem_thrown_from_a_non_api_route_is_reported(): void
+    {
+        $exception = new ApiProblemException(ProblemCode::ServerError, 503, 'sms provider down');
+
+        $uri = $this->web('_probe-web/unavailable', function () use ($exception): never {
+            throw $exception;
+        });
+
+        $reported = $this->reportedBy(fn () => $this->get($uri)->assertStatus(503));
+
+        // الاستثناء الأصلي بعينه، لا HttpException محوَّلاً تُسقطه القائمة الداخلية
+        $this->assertSame([$exception], $reported);
+    }
+
+    #[Test]
+    public function a_4xx_problem_thrown_from_a_non_api_route_is_not_reported(): void
+    {
+        $uri = $this->web('_probe-web/conflict', function (): never {
+            throw ApiException::phoneTaken();
+        });
+
+        $reported = $this->reportedBy(fn () => $this->get($uri));
+
+        $this->assertSame([], $reported);
     }
 
     // ─── الويب لا يتأثر ───

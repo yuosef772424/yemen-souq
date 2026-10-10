@@ -4,11 +4,13 @@ namespace App\Modules\Shared\Http\Problem;
 
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
@@ -88,6 +90,25 @@ final class ProblemDetails
         }
 
         return new HttpException($e->status, $e->getMessage(), $e, $e->headers);
+    }
+
+    /**
+     * عرض `ApiProblemException` خارج ‎/api‎ بصفحات لارافل المعتادة.
+     *
+     * يجري التحويل وقت العرض لا بـ`$exceptions->map()`: الأخير يُطبَّق
+     * أيضاً في `report()` قبل فحص «لا تُبلَّغ»، فيصير الاستثناء 5xx
+     * `HttpException` تُسقطه قائمة لارافل الداخلية ولا يصل السجلّ.
+     * هنا يرى `report()` الاستثناء الأصلي فتقرّر `dontReportWhen`.
+     *
+     * يعيد null لطلب ‎/api‎ (تتولاه `render`) ليتابع لارافل مساره.
+     */
+    public static function renderForWeb(ApiProblemException $e, Request $request): ?Response
+    {
+        if (self::handles($request)) {
+            return null;
+        }
+
+        return app(ExceptionHandler::class)->render($request, self::forWeb($e));
     }
 
     /**

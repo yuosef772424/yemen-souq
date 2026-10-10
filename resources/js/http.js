@@ -221,7 +221,11 @@ function withQuery(url, query) {
  * - يرسل `Accept: application/json` و`X-Requested-With` ورمز CSRF من
  *   `<meta name="csrf-token">` (يُهمَل إن غاب).
  * - كائن `body` يُرسَل JSON؛ `FormData` يُمرَّر كما هو (المتصفح يضبط الحدود).
- * - `credentials: 'same-origin'` — ‎/api‎ نفس الأصل، والجلسة تُرسَل مع الكوكيز.
+ * - `credentials: 'same-origin'` — ‎/api‎ نفس الأصل، فتُرسَل الكوكيز إن وُجدت. لكنها
+ *   لا تصادِق: لا `statefulApi()` ولا `EnsureFrontendRequestsAreStateful`، فمسارات
+ *   `auth:sanctum` تحتاج `Authorization: Bearer <token>` تمرّره عبر `headers`.
+ * - أسماء الترويسات لا تتأثر بحالة الأحرف: ما يمرّره المستدعي يحلّ محلّ الافتراضي
+ *   (`x-csrf-token` تساوي `X-CSRF-TOKEN`) بدل أن تُرسَل الترويستان معاً.
  *
  * @param {string} url
  * @param {HttpOptions} [options]
@@ -231,17 +235,22 @@ export async function request(url, options = {}) {
     const { method = 'GET', body = null, headers = {}, query, signal } = options;
     const verb = method.toUpperCase();
 
-    /** @type {Record<string, string>} */
-    const sent = {
+    // Headers لا الكائن العادي: أسماؤها غير حسّاسة لحالة الأحرف، فـ`set`/`has`
+    // يستبدلان لا يكرّران (كائنان بمفتاحَي `X-CSRF-TOKEN` و`x-csrf-token`
+    // يُدمجان عند الإرسال في «t, t» فيرفضه الخادم 419).
+    const sent = new Headers({
         Accept: 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
-        ...headers,
-    };
+    });
+
+    for (const [name, value] of new Headers(headers)) {
+        sent.set(name, value);
+    }
 
     const token = csrfToken();
 
-    if (token && !('X-CSRF-TOKEN' in sent)) {
-        sent['X-CSRF-TOKEN'] = token;
+    if (token && !sent.has('X-CSRF-TOKEN')) {
+        sent.set('X-CSRF-TOKEN', token);
     }
 
     let payload;
@@ -253,7 +262,9 @@ export async function request(url, options = {}) {
             payload = body;
         } else {
             payload = JSON.stringify(body);
-            sent['Content-Type'] = sent['Content-Type'] || 'application/json';
+            if (!sent.has('Content-Type')) {
+                sent.set('Content-Type', 'application/json');
+            }
         }
     }
 

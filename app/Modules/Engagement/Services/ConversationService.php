@@ -14,6 +14,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * فتح المحادثات وإرسال الرسائل.
@@ -51,8 +52,12 @@ use Illuminate\Validation\ValidationException;
  *      - الرسالة الموجودة تُعاد كما هي: لا صفّ ثانٍ ولا إشعار ثانٍ.
  *      - التكرار لا يُحتسب على حدّ المعدل، ولا يُرفض لو بلغ المرسل الحدّ:
  *        هو ليس رسالة جديدة، ورفضه يخبر العميل أن رسالته لم تصل وقد وصلت.
- *      - tooManyAttempts تُفحص قبل الإنشاء، وhit بعد نجاحه: محاولة فاشلة
- *        لا تستهلك الحدّ.
+ *      - الحدّ يُحجز قبل الإنشاء لا بعده: tooManyAttempts ثم hit فوراً،
+ *        قبل المعاملة. لو سُجّل الـhit بعد المعاملة لمرّ كل طلب متوازٍ
+ *        من الفحص قبل أن يسجّل أيٌّ منها شيئاً. والحجز يُردّ (decrement)
+ *        لو انتهت المحاولة بلا رسالة جديدة: تكرار سبقه طلب آخر، أو
+ *        استثناء — فمحاولة فاشلة أو مكرّرة لا تستهلك الحدّ. والبحث عن
+ *        المعرّف يسبق الحجز كله، فالتكرار لا يلمس العدّاد أصلاً.
  *    المرجع: deduplicateCreatePost في Mattermost (PendingPostId)،
  *    ومفتاح Idempotency-Key في Stripe. وبلا معرّف (عميل قديم) يبقى
  *    السلوك السابق كما هو.
@@ -93,7 +98,7 @@ final class ConversationService
      *
      * firstOrCreate لا create — انظر تعليق Conversation.
      *
-     * الترتيب مقصود: بحثٌ عن المعرّف، فحصُ الحدّ، الإنشاء، ثم hit.
+     * الترتيب مقصود: بحثٌ عن المعرّف، حجزُ الحدّ (فحصٌ ثم hit)، ثم الإنشاء.
      * البحث قبل المعاملة لا داخلها: المسابِق الذي يفوز يكتب في معاملته
      * هو، والخاسر يلتقط مخالفة الفريد ويقرأ الصفّ الفائز بعد تراجع
      * معاملته.
@@ -106,7 +111,7 @@ final class ConversationService
             return $existing;
         }
 
-        $this->guardRate($buyer);
+        $this->reserveRate($buyer);
 
         try {
             [$conversation, $message, $isFirst] = DB::transaction(function () use ($buyer, $listing, $body, $clientId): array {
@@ -122,11 +127,15 @@ final class ConversationService
                 return [$conversation, $message, $isFirst];
             });
         } catch (UniqueConstraintViolationException $e) {
-            // طلبان بالمعرّف نفسه مرّا معاً من البحث — الآخر سبق
-            return $this->findDuplicateForListing($buyer, $listing, $clientId) ?? throw $e;
-        }
+            // طلبان بالمعرّف نفسه مرّا معاً من البحث — الآخر سبق، والتكرار لا يُحتسب
+            $this->releaseRate($buyer);
 
-        $this->hitRate($buyer);
+            return $this->findDuplicateForListing($buyer, $listing, $clientId) ?? throw $e;
+        } catch (Throwable $e) {
+            $this->releaseRate($buyer);
+
+            throw $e;
+        }
 
         if ($isFirst) {
             $this->events->record(EventName::ContactRevealed, 'listing', $listing->id, [
@@ -151,15 +160,20 @@ final class ConversationService
             return $existing;
         }
 
-        $this->guardRate($sender);
+        $this->reserveRate($sender);
 
         try {
             $message = DB::transaction(fn (): Message => $this->append($conversation, $sender, $body, $clientId));
         } catch (UniqueConstraintViolationException $e) {
-            return $this->findDuplicate($conversation, $sender, $clientId) ?? throw $e;
-        }
+            // الآخر سبق، والتكرار لا يُحتسب
+            $this->releaseRate($sender);
 
-        $this->hitRate($sender);
+            return $this->findDuplicate($conversation, $sender, $clientId) ?? throw $e;
+        } catch (Throwable $e) {
+            $this->releaseRate($sender);
+
+            throw $e;
+        }
 
         return new SentMessage($conversation, $message, true);
     }
@@ -224,15 +238,51 @@ final class ConversationService
     private function guardRate(User $sender): void
     {
         if (RateLimiter::tooManyAttempts(self::rateKey($sender), self::RATE_LIMIT)) {
-            throw ValidationException::withMessages([
-                'body' => 'رسائل كثيرة في وقت قصير. انتظر دقيقة ثم أعد المحاولة.',
-            ]);
+            throw self::rateLimited();
         }
     }
 
-    private function hitRate(User $sender): void
+    /**
+     * فحص الحدّ ثم حجز مكان فيه قبل أي كتابة.
+     *
+     * الفحص وحده لا يكفي: بين tooManyAttempts وhit تمرّ طلبات متوازية كلها.
+     * فبعد الحجز نقرأ العدّاد الذي أعاده hit نفسه (زيادة ذرّية في المخزن) —
+     * من تجاوز بهذا الحجز الحدّ يردّه ويُرفض، فلا يعبر الحدّ أكثر من
+     * RATE_LIMIT طلباً حتى لو اجتاز الجميع الفحص معاً.
+     */
+    private function reserveRate(User $sender): void
     {
-        RateLimiter::hit(self::rateKey($sender), self::RATE_WINDOW);
+        $this->guardRate($sender);
+
+        $attempts = RateLimiter::hit(self::rateKey($sender), self::RATE_WINDOW);
+
+        if ($attempts > self::RATE_LIMIT) {
+            $this->releaseRate($sender);
+
+            throw self::rateLimited();
+        }
+    }
+
+    /**
+     * ردّ حجز لم تنتج عنه رسالة جديدة.
+     *
+     * لو انقضت النافذة بين الحجز والردّ يبدأ العدّاد من الصفر فيصير سالباً،
+     * والسالب ميزانية إضافية مجانية — فيُصفَّر.
+     */
+    private function releaseRate(User $sender): void
+    {
+        $key = self::rateKey($sender);
+
+        if (RateLimiter::decrement($key, self::RATE_WINDOW) < 0) {
+            RateLimiter::resetAttempts($key);
+        }
+    }
+
+    private static function rateLimited(): ValidationException
+    {
+        return ValidationException::withMessages([
+            'body' => 'رسائل كثيرة في وقت قصير. انتظر دقيقة ثم أعد المحاولة.',
+        ]);
     }
 
     private static function rateKey(User $sender): string

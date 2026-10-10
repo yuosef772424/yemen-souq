@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\Support\SeedsCatalog;
 use Tests\TestCase;
@@ -263,6 +264,140 @@ class ConversationIdempotencyTest extends TestCase
 
         $this->assertSame(ConversationService::RATE_LIMIT, $this->rateAttempts($this->buyer));
         $this->assertSame(ConversationService::RATE_LIMIT, Message::count());
+    }
+
+    /** رسائل متتابعة بمعرّفات مختلفة تتجاوز الحدّ: يمرّ RATE_LIMIT منها فقط */
+    #[Test]
+    public function sequential_requests_past_the_limit_are_capped(): void
+    {
+        $accepted = 0;
+        $rejected = 0;
+
+        for ($i = 0; $i < ConversationService::RATE_LIMIT + 5; $i++) {
+            try {
+                $this->service->startOrContinue($this->buyer, $this->listing, "رسالة {$i}", "burst-{$i}");
+                $accepted++;
+            } catch (ValidationException) {
+                $rejected++;
+            }
+        }
+
+        $this->assertSame(ConversationService::RATE_LIMIT, $accepted);
+        $this->assertSame(5, $rejected);
+        $this->assertSame(ConversationService::RATE_LIMIT, Message::count());
+        $this->assertSame(ConversationService::RATE_LIMIT, $this->rateAttempts($this->buyer));
+    }
+
+    /**
+     * الثغرة التي أُغلقت: طلب ثانٍ يصل أثناء معاملة الأول، أي بعد أن
+     * اجتاز الأول الفحص وقبل أن يكتب. لو سُجّل الـhit بعد المعاملة لرآه
+     * الثاني عدّاداً قديماً ومرّ، فيتجاوز الاثنان الحدّ معاً.
+     */
+    #[Test]
+    public function a_request_arriving_during_another_transaction_cannot_slip_past_the_limit(): void
+    {
+        $conversation = $this->service->startOrContinue($this->buyer, $this->listing, 'مرحبا')->conversation;
+
+        // يبقى مكان واحد في الحدّ
+        for ($i = 0; $i < ConversationService::RATE_LIMIT - 2; $i++) {
+            RateLimiter::hit("messages:{$this->buyer->id}", ConversationService::RATE_WINDOW);
+        }
+
+        $this->assertSame(ConversationService::RATE_LIMIT - 1, $this->rateAttempts($this->buyer));
+
+        $outcome = null;
+        $fired = false;
+
+        DB::listen(function ($query) use (&$outcome, &$fired, $conversation): void {
+            if ($fired || ! str_starts_with(ltrim($query->sql), 'insert into "messages"')) {
+                return;
+            }
+
+            $fired = true;
+
+            try {
+                $this->service->reply($conversation, $this->buyer, 'المتوازي', 'parallel-b');
+                $outcome = 'accepted';
+            } catch (ValidationException) {
+                $outcome = 'rejected';
+            }
+        });
+
+        $this->service->reply($conversation, $this->buyer, 'الأول', 'parallel-a');
+
+        $this->assertSame('rejected', $outcome);
+        $this->assertSame(ConversationService::RATE_LIMIT, $this->rateAttempts($this->buyer));
+        $this->assertSame(0, Message::where('client_id', 'parallel-b')->count());
+        $this->assertSame(2, Message::count());
+    }
+
+    /** الخاسر في سباق على المعرّف يردّ حجزه: التكرار لا يُحتسب حتى على المسار المتأخر */
+    #[Test]
+    public function losing_a_race_releases_the_reserved_hit(): void
+    {
+        $conversation = $this->service->startOrContinue($this->buyer, $this->listing, 'مرحبا')->conversation;
+        $this->assertSame(1, $this->rateAttempts($this->buyer));
+
+        $this->winnerInsertsAfterFirstLookup($conversation, $this->buyer, 'race-rate-reply');
+        $reply = $this->service->reply($conversation, $this->buyer, 'الخاسر', 'race-rate-reply');
+
+        $this->assertFalse($reply->created);
+        $this->assertSame(1, $this->rateAttempts($this->buyer));
+    }
+
+    #[Test]
+    public function losing_a_race_on_start_or_continue_releases_the_reserved_hit(): void
+    {
+        $conversation = $this->service->startOrContinue($this->buyer, $this->listing, 'مرحبا')->conversation;
+        $this->assertSame(1, $this->rateAttempts($this->buyer));
+
+        $this->winnerInsertsAfterFirstLookup($conversation, $this->buyer, 'race-rate-start');
+        $sent = $this->service->startOrContinue($this->buyer, $this->listing, 'الخاسر', 'race-rate-start');
+
+        $this->assertFalse($sent->created);
+        $this->assertSame(1, $this->rateAttempts($this->buyer));
+    }
+
+    /** تكرار يصل والحدّ ممتلئ: لا يُرفض ولا يلمس العدّاد (مسار البحث المبكر) */
+    #[Test]
+    public function an_early_duplicate_at_the_limit_neither_rejects_nor_touches_the_counter(): void
+    {
+        $conversation = $this->service->startOrContinue($this->buyer, $this->listing, 'الأولى', 'early-dup')->conversation;
+
+        for ($i = 0; $i < ConversationService::RATE_LIMIT - 1; $i++) {
+            RateLimiter::hit("messages:{$this->buyer->id}", ConversationService::RATE_WINDOW);
+        }
+
+        $this->assertSame(ConversationService::RATE_LIMIT, $this->rateAttempts($this->buyer));
+
+        $again = $this->service->reply($conversation, $this->buyer, 'الأولى', 'early-dup');
+        $viaStart = $this->service->startOrContinue($this->buyer, $this->listing, 'الأولى', 'early-dup');
+
+        $this->assertFalse($again->created);
+        $this->assertFalse($viaStart->created);
+        $this->assertSame(ConversationService::RATE_LIMIT, $this->rateAttempts($this->buyer));
+    }
+
+    /** فشل الكتابة باستثناء آخر يردّ الحجز أيضاً: محاولة فاشلة لا تستهلك الحدّ */
+    #[Test]
+    public function a_failed_write_releases_the_reserved_hit(): void
+    {
+        $conversation = $this->service->startOrContinue($this->buyer, $this->listing, 'مرحبا')->conversation;
+
+        DB::listen(function ($query): void {
+            if (str_starts_with(ltrim($query->sql), 'insert into "messages"')) {
+                throw new \RuntimeException('boom');
+            }
+        });
+
+        try {
+            $this->service->reply($conversation, $this->buyer, 'تفشل', 'will-fail');
+            $this->fail('expected the write to fail');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('boom', $e->getMessage());
+        }
+
+        $this->assertSame(1, $this->rateAttempts($this->buyer));
     }
 
     /** محاولة رُفضت بالحدّ لا تترك محادثة فارغة ولا تستهلك الحدّ */

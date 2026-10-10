@@ -201,6 +201,12 @@ Alpine.data('messageForm', () => ({
         // مرة واحدة هنا — لا في submit، وإلا تراكمت المستمعات
         this.onPageShow = (event) => {
             if (event.persisted) {
+                // الصفحة عادت من bfcache والحقل يحمل معرّف رسالة أُرسلت: بلا
+                // معرّف جديد تُعدّ الرسالة التالية تكراراً وتُسقط بصمت
+                if (this.$refs.clientId) {
+                    this.$refs.clientId.value = newClientId();
+                }
+
                 this.reset();
             }
         };

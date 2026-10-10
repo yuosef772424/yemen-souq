@@ -2,19 +2,19 @@
 
 namespace App\Modules\Catalog\Http\Controllers;
 
-use App\Models\User;
+use App\Modules\Catalog\Actions\ToggleListingSold;
+use App\Modules\Catalog\Actions\UpdateListing;
 use App\Modules\Catalog\Http\Requests\UpdateListingRequest;
 use App\Modules\Catalog\Models\Listing;
 use App\Modules\Catalog\Models\ListingImage;
 use App\Modules\Catalog\Services\ListingAttributes;
 use App\Modules\Catalog\Services\ListingImageService;
 use App\Modules\Catalog\Services\ListingRenewalService;
-use App\Modules\Catalog\Services\ListingSaleMarker;
 use App\Modules\Catalog\Services\ListingStatsReader;
+use App\Modules\Catalog\Services\OwnerListings;
 use App\Modules\Shared\Models\Category;
 use App\Modules\Shared\Models\Currency;
 use App\Modules\Shared\Models\Location;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -33,21 +33,17 @@ use Illuminate\View\View;
  */
 class AccountListingController
 {
-    /**
-     * التبويبات: ما يمكن للنظام أن ينتجه فعلاً، لا كل قيم عمود status.
-     *
-     * و«مباعة» تبويب لا حالة مخفية: الإعلان المباع يخرج من «المعروضة»
-     * ومن نتائج البحث معاً، فبلا تبويب له يختفي من كل مكان — ولا يجد
-     * المعلن طريقاً للتراجع عن نقرة خاطئة.
-     */
-    private const TABS = ['live', 'sold', 'expired', 'trashed', 'all'];
+    /** حجم صفحة الويب — الـAPI يأخذ حجمه من العميل */
+    private const PER_PAGE = 12;
 
     public function __construct(
         private readonly ListingImageService $images,
         private readonly ListingRenewalService $renewal,
         private readonly ListingStatsReader $stats,
-        private readonly ListingSaleMarker $sales,
         private readonly ListingAttributes $attributes,
+        private readonly OwnerListings $owned,
+        private readonly UpdateListing $updateListing,
+        private readonly ToggleListingSold $toggleSale,
     ) {}
 
     // ─── إعلاناتي ───
@@ -55,14 +51,12 @@ class AccountListingController
     public function index(Request $request): View
     {
         $user = $request->user();
-        $tab = in_array($request->string('tab')->value(), self::TABS, true)
-            ? $request->string('tab')->value()
-            : 'live';
+        $tab = $this->owned->resolveTab($request->string('tab')->value());
 
         return view('catalog::account.index', [
             'tab' => $tab,
-            'counts' => $this->counts($user),
-            'listings' => $this->paginate($user, $tab),
+            'counts' => $this->owned->counts($user),
+            'listings' => $this->owned->paginate($user, $tab, self::PER_PAGE),
             'baseCurrency' => Currency::base(),
             'renewal' => $this->renewal,
         ]);
@@ -111,41 +105,27 @@ class AccountListingController
     /**
      * الحفظ.
      *
-     * ما لا يفعله هذا الفعل مقصود بقدر ما يفعله:
-     *
-     *  · لا يغيّر slug عند تغيير العنوان. الرابط قد يكون منشوراً في
-     *    واتساب ومحفوظاً في مفضلة زائر؛ تغييره يكسر ما لا نراه.
-     *    (ListingObserver::fillSlug يملأ slug عند الفراغ فقط، فالسلوك
-     *    قائم أصلاً — وهذا تنبيه لمن يعدّله لاحقاً.)
-     *
-     *  · لا يمسّ price_in_base ولا search_blob ولا title_normalized.
-     *    ListingObserver يعيد حسابها كلها في saving. ولو حسبناها هنا
-     *    لتفرّق الحساب في موضعين.
-     *
-     *  · لا يسجّل تغيّر السعر: الـObserver يكتب listing_price_history
-     *    في updated. فتعديل السعر من اللوحة يُسجَّل تلقائياً.
-     *
-     * والمواصفات تُكتب **بعد** حفظ الإعلان لا قبله: ListingAttributes::write
-     * تقرأ category_id من النموذج لتعرف أي صفات مسموحة. فلو سبقت الحفظ
-     * لقرأت التصنيف القديم — فتكتب صفات «سيارات» على إعلان صار «شققاً»،
-     * وهي بالضبط الحالة التي جاء التعديل ليدعمها.
+     * ما لا يفعله هذا الفعل وترتيب خطواته (حقول ثم مواصفات ثم صور) موثّقان
+     * في `UpdateListing`، وهو ما يستدعيه متحكّم الـAPI أيضاً. وهنا ما يخصّ
+     * الويب وحده: رسالة الجلسة ووجهة إعادة التوجيه.
      */
     public function update(UpdateListingRequest $request, Listing $listing): RedirectResponse
     {
         Gate::authorize('update', $listing);
 
-        $listing->update($request->safe()->except('images', 'attributes'));
-
-        $this->attributes->write($listing, $request->validated('attributes', []));
-
-        $result = $this->images->attach($listing, $request->file('images', []));
+        $result = ($this->updateListing)(
+            $listing,
+            $request->safe()->except('images', 'attributes'),
+            $request->validated('attributes', []),
+            $request->file('images', []),
+        );
 
         return redirect()
             ->route('account.listings.edit', $listing)
-            ->with('status', $result['stored'] > 0
-                ? "حُدِّث الإعلان وأُضيفت {$result['stored']} صورة."
+            ->with('status', $result->imagesStored > 0
+                ? "حُدِّث الإعلان وأُضيفت {$result->imagesStored} صورة."
                 : 'حُدِّث الإعلان.')
-            ->with('warnings', $result['failed']);
+            ->with('warnings', $result->failed);
     }
 
     public function destroyImage(Listing $listing, ListingImage $image): RedirectResponse
@@ -218,20 +198,16 @@ class AccountListingController
     // ─── البيع ───
 
     /**
-     * زرّ واحد بمسارين حسب الحالة الحالية.
-     *
-     * لماذا لا مساران منفصلان: الزرّ في الواجهة واحد يتبدّل نصّه، ومساران
-     * يعنيان أن الواجهة تقرّر أيّهما تستدعي — فتُرسل «بِع» على إعلان مباع
-     * إن تأخّر تحديث الصفحة. القرار هنا مبنيّ على الحالة في قاعدة
-     * البيانات لا على ما رآه المتصفح.
+     * زرّ واحد بمسارين حسب الحالة الحالية — القرار في `ToggleListingSold`،
+     * وهنا الرسائل ووجهة التحويل فقط.
      */
     public function toggleSold(Listing $listing): RedirectResponse
     {
         Gate::authorize('markSold', $listing);
 
-        if ($listing->status === 'sold') {
-            $done = $this->sales->unmarkSold($listing);
+        ['wasSold' => $wasSold, 'done' => $done] = ($this->toggleSale)($listing);
 
+        if ($wasSold) {
             return redirect()
                 ->route('account.listings')
                 ->with(
@@ -239,8 +215,6 @@ class AccountListingController
                     $done ? 'أُعيد الإعلان إلى العرض.' : 'تعذّر إرجاع الإعلان.'
                 );
         }
-
-        $done = $this->sales->markSold($listing);
 
         return redirect()
             ->route('account.listings', ['tab' => $done ? 'sold' : null])
@@ -263,68 +237,5 @@ class AccountListingController
             'stats' => $this->stats->forListing($listing),
             'reader' => $this->stats,
         ]);
-    }
-
-    // ─── التفاصيل ───
-
-    /**
-     * العدّادات في استعلامين لا خمسة.
-     *
-     * استعلام لكل تبويب يعني خمس رحلات إلى القاعدة لرسم أربعة أرقام في
-     * أعلى الصفحة. والاستعلام الثاني ضروري لا زائد: الحذف المنطقي يُقصي
-     * الصفوف المحذوفة من الاستعلام الأول بأثر SoftDeletes، فلا يمكن
-     * عدّها فيه.
-     *
-     * ولاحظ أن «المنتهية» تُحسب من expires_at لا من status = 'expired':
-     * لا شيء في النظام يكتب تلك الحالة (وهذا مقصود — انظر scopeNotExpired)،
-     * فتبويب يعتمد عليها يبقى صفراً إلى الأبد بينما الإعلانات تنتهي فعلاً.
-     *
-     * @return array{live: int, expired: int, trashed: int, all: int}
-     */
-    private function counts(User $user): array
-    {
-        $now = now()->toDateTimeString();
-
-        $row = Listing::query()
-            ->ownedBy($user)
-            ->selectRaw('COUNT(*) as all_count')
-            ->selectRaw(
-                "SUM(CASE WHEN status = 'active' AND (expires_at IS NULL OR expires_at >= ?) THEN 1 ELSE 0 END) as live_count",
-                [$now]
-            )
-            ->selectRaw(
-                'SUM(CASE WHEN expires_at IS NOT NULL AND expires_at < ? THEN 1 ELSE 0 END) as expired_count',
-                [$now]
-            )
-            ->selectRaw("SUM(CASE WHEN status = 'sold' THEN 1 ELSE 0 END) as sold_count")
-            ->first();
-
-        return [
-            'live' => (int) ($row->live_count ?? 0),
-            'sold' => (int) ($row->sold_count ?? 0),
-            'expired' => (int) ($row->expired_count ?? 0),
-            'trashed' => Listing::onlyTrashed()->ownedBy($user)->count(),
-            'all' => (int) ($row->all_count ?? 0),
-        ];
-    }
-
-    private function paginate(User $user, string $tab): LengthAwarePaginator
-    {
-        $query = Listing::query()
-            ->ownedBy($user)
-            ->with(['images', 'currency', 'category', 'location']);
-
-        match ($tab) {
-            'live' => $query->active()->notExpired(),
-            'sold' => $query->where('status', 'sold'),
-            'expired' => $query->expired(),
-            'trashed' => $query->onlyTrashed(),
-            default => $query,
-        };
-
-        return $query
-            ->orderByDesc($tab === 'trashed' ? 'deleted_at' : 'created_at')
-            ->paginate(12)
-            ->withQueryString();
     }
 }
